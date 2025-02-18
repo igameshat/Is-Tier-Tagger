@@ -228,7 +228,7 @@ public class IstiertaggerClient implements ClientModInitializer {
 			String uuid = player.get("minecraftUUID").getAsString();
 			JsonArray filterStats = player.getAsJsonArray(filter);
 
-			if (filterStats != null && filterStats.size() > 0) {
+			if (filterStats != null && !filterStats.isEmpty()) {
 				JsonObject stat = filterStats.get(0).getAsJsonObject();
 				String tier = stat.get("tier").getAsString();
 				int points = getPointsForTier(tier);
@@ -450,7 +450,7 @@ public class IstiertaggerClient implements ClientModInitializer {
 
 			// Parse stats
 			JsonArray stats = userData.getAsJsonArray("stats");
-			if (stats.size() > 0) {
+			if (!stats.isEmpty()) {
 				JsonObject gameStats = stats.get(0).getAsJsonObject();
 
 				if (filter == null) {
@@ -460,7 +460,7 @@ public class IstiertaggerClient implements ClientModInitializer {
 					int totalPoints = 0;
 					for (String gameMode : new String[]{"crystal", "pot", "sword", "uhc", "smp"}) {
 						JsonArray modeStats = gameStats.getAsJsonArray(gameMode);
-						if (modeStats != null && modeStats.size() > 0) {
+						if (modeStats != null && !modeStats.isEmpty()) {
 							JsonObject stat = modeStats.get(0).getAsJsonObject();
 							String tier = stat.get("tier").getAsString();
 							totalPoints += getPointsForTier(tier);
@@ -491,7 +491,7 @@ public class IstiertaggerClient implements ClientModInitializer {
 								 String gameMode, String displayName, String username) {
 		try {
 			JsonArray modeStats = gameStats.getAsJsonArray(gameMode);
-			if (modeStats != null && modeStats.size() > 0) {
+			if (modeStats != null && !modeStats.isEmpty()) {
 				JsonObject stat = modeStats.get(0).getAsJsonObject();
 				String tier = stat.get("tier").getAsString();
 				String lastUpdate = stat.get("lastupdate").getAsString();

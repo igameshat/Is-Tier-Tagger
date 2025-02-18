@@ -18,6 +18,11 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonArray;
@@ -31,7 +36,7 @@ public class IstiertaggerClient implements ClientModInitializer {
 			.build();
 
 	private static JDA jda;
-	private static final String DISCORD_TOKEN = "YOUR_BOT_TOKEN_HERE"; // Replace with your bot token
+	private static final String DISCORD_TOKEN = null;
 
 	private HttpRequest.Builder createApiRequest(String uuid) {
 		return HttpRequest.newBuilder()
@@ -51,14 +56,239 @@ public class IstiertaggerClient implements ClientModInitializer {
 			dispatcher.register(literal("istagger")
 					.then(argument("username", StringArgumentType.word())
 							.executes(context -> {
-								handlePlayerLookup(context.getSource(), StringArgumentType.getString(context, "username"));
+								// Default command without filter
+								handlePlayerLookup(context.getSource(), StringArgumentType.getString(context, "username"), null);
 								return 1;
-							})));
+							})
+							.then(argument("filter", StringArgumentType.word())
+									.executes(context -> {
+										String username = StringArgumentType.getString(context, "username");
+										String filter = StringArgumentType.getString(context, "filter").toLowerCase();
+										if (isValidFilter(filter)) {
+											handlePlayerLookup(context.getSource(), username, filter);
+										} else {
+											((FabricClientCommandSource) context.getSource()).getPlayer().sendMessage(
+													Text.literal("§cInvalid filter. Valid options: crystal, sword, uhc, pot, smp"),
+													false
+											);
+										}
+										return 1;
+									})
+							)
+					));
+
+			// Add command for viewing tier lists
+			dispatcher.register(literal("istaggertiers")
+					.then(argument("filter", StringArgumentType.word())
+							.executes(context -> {
+								String filter = StringArgumentType.getString(context, "filter").toLowerCase();
+								if (isValidFilter(filter)) {
+									handleTierList(context.getSource(), filter);
+								} else {
+									((FabricClientCommandSource) context.getSource()).getPlayer().sendMessage(
+											Text.literal("§cInvalid filter. Valid options: crystal, sword, uhc, pot, smp"),
+											false
+									);
+								}
+								return 1;
+							})
+					));
 		});
 	}
 
-	private void handlePlayerLookup(FabricClientCommandSource source, String username) {
-		source.getPlayer().sendMessage(Text.literal("Looking up data for " + username + "..."), false);
+	private static final JsonObject TIER_POINTS = GSON.fromJson(
+			"{ \"HT1\": 60, \"LT1\": 44, \"HT2\": 28, \"LT2\": 16, \"HT3\": 10, \"LT3\": 6, \"HT4\": 4, \"LT4\": 3, \"HT5\": 2, \"LT5\": 1 }",
+			JsonObject.class
+	);
+
+	private int getPointsForTier(String tier) {
+		try {
+			if (tier != null && !tier.isEmpty() && TIER_POINTS.has(tier)) {
+				return TIER_POINTS.get(tier).getAsInt();
+			}
+		} catch (Exception e) {
+			LOGGER.error("Error getting points for tier: " + tier, e);
+		}
+		return 0;
+	}
+
+	private boolean isValidFilter(String filter) {
+		return filter.equals("crystal") ||
+				filter.equals("sword") ||
+				filter.equals("uhc") ||
+				filter.equals("pot") ||
+				filter.equals("smp");
+	}
+
+	private void handleTierList(FabricClientCommandSource source, String filter) {
+		source.getPlayer().sendMessage(Text.literal("Fetching " + filter + " tier list..."), false);
+
+		new Thread(() -> {
+			try {
+				HttpRequest request = HttpRequest.newBuilder()
+						.uri(URI.create("https://api.israeltiers.com/api/tiers?filter=" + filter))
+						.header("accept", "application/json")
+						.GET()
+						.timeout(Duration.ofSeconds(20))
+						.build();
+
+				HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+
+				if (response.statusCode() == 200) {
+					JsonArray tiers = GSON.fromJson(response.body(), JsonArray.class);
+					displayTierList(source, filter, tiers);
+				} else {
+					source.getPlayer().sendMessage(
+							Text.literal("§cFailed to fetch tier list. Status: " + response.statusCode()),
+							false
+					);
+				}
+			} catch (Exception e) {
+				LOGGER.error("Error fetching tier list", e);
+				source.getPlayer().sendMessage(
+						Text.literal("§cError fetching tier list: " + e.getMessage()),
+						false
+				);
+			}
+		}, "TierList-Thread").start();
+	}
+
+	private void displayDiscordInfo(FabricClientCommandSource source, String discordId) {
+		if (jda != null) {
+			try {
+				jda.retrieveUserById(discordId).queue(
+						user -> {
+							if (user != null) {
+								// Create clickable discord name
+								source.getPlayer().sendMessage(
+										Text.literal("§7Discord: ")
+												.append(Text.literal("§f" + user.getName())
+														.styled(style -> style.withClickEvent(
+																new net.minecraft.text.ClickEvent(
+																		net.minecraft.text.ClickEvent.Action.COPY_TO_CLIPBOARD,
+																		discordId
+																)
+														))
+														.styled(style -> style.withHoverEvent(
+																new net.minecraft.text.HoverEvent(
+																		net.minecraft.text.HoverEvent.Action.SHOW_TEXT,
+																		Text.literal("§7Click to copy Discord ID")
+																)
+														))
+												),
+										false
+								);
+							} else {
+								displayDiscordId(source, discordId);
+							}
+						},
+						error -> {
+							LOGGER.error("Error fetching Discord user", error);
+							displayDiscordId(source, discordId);
+						}
+				);
+			} catch (Exception e) {
+				LOGGER.error("Error with Discord lookup", e);
+				displayDiscordId(source, discordId);
+			}
+		} else {
+			displayDiscordId(source, discordId);
+		}
+	}
+
+	private void displayDiscordId(FabricClientCommandSource source, String discordId) {
+		source.getPlayer().sendMessage(
+				Text.literal("§7Discord ID: ")
+						.append(Text.literal("§f" + discordId)
+								.styled(style -> style.withClickEvent(
+										new net.minecraft.text.ClickEvent(
+												net.minecraft.text.ClickEvent.Action.COPY_TO_CLIPBOARD,
+												discordId
+										)
+								))
+								.styled(style -> style.withHoverEvent(
+										new net.minecraft.text.HoverEvent(
+												net.minecraft.text.HoverEvent.Action.SHOW_TEXT,
+												Text.literal("§7Click to copy Discord ID")
+										)
+								))
+						),
+				false
+		);
+	}
+
+	private void displayTierList(FabricClientCommandSource source, String filter, JsonArray tiers) {
+		source.getPlayer().sendMessage(Text.literal("\n§6=== " + filter.toUpperCase() + " Tier List ==="), false);
+
+		// Sort players by points
+		List<Map.Entry<String, Integer>> sortedPlayers = new ArrayList<>();
+
+		for (int i = 0; i < tiers.size(); i++) {
+			JsonObject player = tiers.get(i).getAsJsonObject();
+			String uuid = player.get("minecraftUUID").getAsString();
+			JsonArray filterStats = player.getAsJsonArray(filter);
+
+			if (filterStats != null && filterStats.size() > 0) {
+				JsonObject stat = filterStats.get(0).getAsJsonObject();
+				String tier = stat.get("tier").getAsString();
+				int points = getPointsForTier(tier);
+				sortedPlayers.add(new AbstractMap.SimpleEntry<>(uuid, points));
+			}
+		}
+
+		// Sort by points (highest first)
+		sortedPlayers.sort((a, b) -> b.getValue().compareTo(a.getValue()));
+
+		// Display sorted list
+		for (int i = 0; i < sortedPlayers.size(); i++) {
+			Map.Entry<String, Integer> entry = sortedPlayers.get(i);
+			String uuid = entry.getKey();
+			int points = entry.getValue();
+
+			// Find player data again
+			for (int j = 0; j < tiers.size(); j++) {
+				JsonObject player = tiers.get(j).getAsJsonObject();
+				if (player.get("minecraftUUID").getAsString().equals(uuid)) {
+					JsonArray filterStats = player.getAsJsonArray(filter);
+					JsonObject stat = filterStats.get(0).getAsJsonObject();
+					String tier = stat.get("tier").getAsString();
+					String lastUpdate = stat.get("lastupdate").getAsString();
+
+					try {
+						String username = fetchUsernameFromUUID(uuid);
+						String formattedTime = formatUnixTimestamp(lastUpdate);
+						source.getPlayer().sendMessage(
+								Text.literal(String.format("#%d §e%s: §b%s §d(%d points) §7(Last updated: §f%s§7)",
+										i + 1, username, tier, points, formattedTime)),
+								false
+						);
+					} catch (Exception e) {
+						LOGGER.error("Error fetching username for UUID: " + uuid, e);
+					}
+					break;
+				}
+			}
+		}
+	}
+
+	private String fetchUsernameFromUUID(String uuid) throws Exception {
+		HttpRequest request = HttpRequest.newBuilder()
+				.uri(URI.create("https://api.mojang.com/user/profile/" + uuid))
+				.GET()
+				.build();
+
+		HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+
+		if (response.statusCode() == 200) {
+			JsonObject profile = GSON.fromJson(response.body(), JsonObject.class);
+			return profile.get("name").getAsString();
+		}
+		return uuid;
+	}
+
+	private void handlePlayerLookup(FabricClientCommandSource source, String username, String filter) {
+		source.getPlayer().sendMessage(Text.literal("Looking up data for " + username +
+				(filter != null ? " (" + filter + " only)" : "") + "..."), false);
 
 		new Thread(() -> {
 			try {
@@ -76,7 +306,7 @@ public class IstiertaggerClient implements ClientModInitializer {
 
 				if (response.statusCode() == 200) {
 					JsonObject data = GSON.fromJson(response.body(), JsonObject.class);
-					displayPlayerData(source, username, data);
+					displayPlayerData(source, username, data, filter);
 				} else {
 					openInBrowser(uuid, username, source);
 				}
@@ -135,38 +365,87 @@ public class IstiertaggerClient implements ClientModInitializer {
 		}
 	}
 
-	private void displayPlayerData(FabricClientCommandSource source, String username, JsonObject data) {
+	private void displayPlayerData(FabricClientCommandSource source, String username, JsonObject data, String filter) {
 		try {
 			// Main header
 			source.getPlayer().sendMessage(Text.literal("§6=== Player Data for " + username + " ==="), false);
 
 			// Basic info
-			source.getPlayer().sendMessage(Text.literal("§7UUID: §f" + data.get("id").getAsString()), false);
-			source.getPlayer().sendMessage(Text.literal("§7Username: §f" + data.get("name").getAsString()), false);
+			String uuid = data.get("id").getAsString();
+			source.getPlayer().sendMessage(
+					Text.literal("§7UUID: ")
+							.append(Text.literal("§f" + uuid)
+									.styled(style -> style.withClickEvent(
+											new net.minecraft.text.ClickEvent(
+													net.minecraft.text.ClickEvent.Action.COPY_TO_CLIPBOARD,
+													uuid
+											)
+									))
+									.styled(style -> style.withHoverEvent(
+											new net.minecraft.text.HoverEvent(
+													net.minecraft.text.HoverEvent.Action.SHOW_TEXT,
+													Text.literal("§7Click to copy UUID")
+											)
+									))
+							),
+					false
+			);
+
+			// Username with NameMC link
+			source.getPlayer().sendMessage(
+					Text.literal("§7Username: ")
+							.append(Text.literal("§f" + username)
+									.styled(style -> style.withClickEvent(
+											new net.minecraft.text.ClickEvent(
+													net.minecraft.text.ClickEvent.Action.OPEN_URL,
+													"https://namemc.com/profile/" + username
+											)
+									))
+									.styled(style -> style.withHoverEvent(
+											new net.minecraft.text.HoverEvent(
+													net.minecraft.text.HoverEvent.Action.SHOW_TEXT,
+													Text.literal("§7Click to view on NameMC")
+											)
+									))
+							),
+					false
+			);
 
 			// Parse userData
 			JsonObject userData = data.get("userData").getAsJsonObject();
 			String discordId = userData.get("discordId").getAsString();
 
-			// Fetch Discord username using JDA
 			if (jda != null) {
-				jda.retrieveUserById(discordId).queue(
-						discordUser -> {
-							if (discordUser != null) {
-								String discordName = discordUser.getName();
-								source.getPlayer().sendMessage(
-										Text.literal("§7Discord: §f" + discordName + " §7(ID: §f" + discordId + "§7)"),
-										false
-								);
-							}
-						},
-						error -> {
-							LOGGER.error("Error fetching Discord user", error);
-							source.getPlayer().sendMessage(Text.literal("§7Discord ID: §f" + discordId), false);
-						}
-				);
+				try {
+					net.dv8tion.jda.api.entities.User user = jda.retrieveUserById(discordId).complete();
+					if (user != null) {
+						source.getPlayer().sendMessage(
+								Text.literal("§7Discord: ")
+										.append(Text.literal("§f" + user.getName())
+												.styled(style -> style.withClickEvent(
+														new net.minecraft.text.ClickEvent(
+																net.minecraft.text.ClickEvent.Action.COPY_TO_CLIPBOARD,
+																discordId
+														)
+												))
+												.styled(style -> style.withHoverEvent(
+														new net.minecraft.text.HoverEvent(
+																net.minecraft.text.HoverEvent.Action.SHOW_TEXT,
+																Text.literal("§7Click to copy Discord ID: " + discordId)
+														)
+												))
+										),
+								false
+						);
+					} else {
+						displayDiscordId(source, discordId);
+					}
+				} catch (Exception e) {
+					LOGGER.error("Error with Discord lookup: " + e.getMessage());
+					displayDiscordId(source, discordId);
+				}
 			} else {
-				source.getPlayer().sendMessage(Text.literal("§7Discord ID: §f" + discordId), false);
+				displayDiscordId(source, discordId);
 			}
 
 			// Parse stats
@@ -174,13 +453,33 @@ public class IstiertaggerClient implements ClientModInitializer {
 			if (stats.size() > 0) {
 				JsonObject gameStats = stats.get(0).getAsJsonObject();
 
-				source.getPlayer().sendMessage(Text.literal("\n§6=== Game Stats ==="), false);
+				if (filter == null) {
+					source.getPlayer().sendMessage(Text.literal("\n§6=== Game Stats ==="), false);
 
-				displayGameMode(source, gameStats, "crystal", "Crystal");
-				displayGameMode(source, gameStats, "pot", "Pot");
-				displayGameMode(source, gameStats, "sword", "Sword");
-				displayGameMode(source, gameStats, "uhc", "UHC");
-				displayGameMode(source, gameStats, "smp", "SMP");
+					// Calculate total points
+					int totalPoints = 0;
+					for (String gameMode : new String[]{"crystal", "pot", "sword", "uhc", "smp"}) {
+						JsonArray modeStats = gameStats.getAsJsonArray(gameMode);
+						if (modeStats != null && modeStats.size() > 0) {
+							JsonObject stat = modeStats.get(0).getAsJsonObject();
+							String tier = stat.get("tier").getAsString();
+							totalPoints += getPointsForTier(tier);
+						}
+					}
+
+					source.getPlayer().sendMessage(Text.literal("§6Total Points: §d" + totalPoints), false);
+
+					// Display all game modes
+					displayGameMode(source, gameStats, "crystal", "Crystal", username);
+					displayGameMode(source, gameStats, "pot", "Pot", username);
+					displayGameMode(source, gameStats, "sword", "Sword", username);
+					displayGameMode(source, gameStats, "uhc", "UHC", username);
+					displayGameMode(source, gameStats, "smp", "SMP", username);
+				} else {
+					// Display only the filtered game mode
+					displayGameMode(source, gameStats, filter,
+							filter.substring(0, 1).toUpperCase() + filter.substring(1), username);
+				}
 			}
 		} catch (Exception e) {
 			LOGGER.error("Error formatting player data", e);
@@ -188,7 +487,8 @@ public class IstiertaggerClient implements ClientModInitializer {
 		}
 	}
 
-	private void displayGameMode(FabricClientCommandSource source, JsonObject gameStats, String gameMode, String displayName) {
+	private void displayGameMode(FabricClientCommandSource source, JsonObject gameStats,
+								 String gameMode, String displayName, String username) {
 		try {
 			JsonArray modeStats = gameStats.getAsJsonArray(gameMode);
 			if (modeStats != null && modeStats.size() > 0) {
@@ -198,22 +498,29 @@ public class IstiertaggerClient implements ClientModInitializer {
 
 				// Only display if there's actual data
 				if (!tier.isEmpty() || !lastUpdate.isEmpty()) {
-					StringBuilder line = new StringBuilder();
-					line.append("§e").append(displayName).append(": ");
+					String formattedTime = formatUnixTimestamp(lastUpdate);
 
-					if (!tier.isEmpty()) {
-						line.append("§b").append(tier);
-					} else {
-						line.append("§7No tier");
-					}
-
-					if (!lastUpdate.isEmpty()) {
-						// Format the timestamp
-						String formattedTime = formatTimestamp(lastUpdate);
-						line.append(" §7(Last updated: §f").append(formattedTime).append("§7)");
-					}
-
-					source.getPlayer().sendMessage(Text.literal(line.toString()), false);
+					// Create clickable game mode stats
+					source.getPlayer().sendMessage(
+							Text.literal("§e" + displayName + ": ")
+									.append(Text.literal("§b" + tier)
+											.styled(style -> style.withClickEvent(
+													new net.minecraft.text.ClickEvent(
+															net.minecraft.text.ClickEvent.Action.OPEN_URL,
+															"https://israeltiers.com/p/" + username
+													)
+											))
+											.styled(style -> style.withHoverEvent(
+													new net.minecraft.text.HoverEvent(
+															net.minecraft.text.HoverEvent.Action.SHOW_TEXT,
+															Text.literal("§7Click to view profile")
+													)
+											))
+									)
+									.append(Text.literal(" §d(" + getPointsForTier(tier) + " points) "))
+									.append(Text.literal("§7(Last updated: §f" + formattedTime + "§7)")),
+							false
+					);
 				}
 			}
 		} catch (Exception e) {
@@ -221,24 +528,16 @@ public class IstiertaggerClient implements ClientModInitializer {
 		}
 	}
 
-	private String formatTimestamp(String timestamp) {
+	private String formatUnixTimestamp(String timestamp) {
 		try {
-			// Input format: DDMMYYYYHHMMSS (e.g., 28112024160332)
-			if (timestamp.length() == 14) {
-				String day = timestamp.substring(0, 2);
-				String month = timestamp.substring(2, 4);
-				String year = timestamp.substring(4, 8);
-				String hour = timestamp.substring(8, 10);
-				String minute = timestamp.substring(10, 12);
-				String second = timestamp.substring(12, 14);
-
-				return String.format("%s/%s/%s %s:%s:%s",
-						day, month, year, hour, minute, second);
-			}
+			long unixTime = Long.parseLong(timestamp);
+			java.util.Date date = new java.util.Date(unixTime * 1000L); // Convert to milliseconds
+			java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+			return sdf.format(date);
 		} catch (Exception e) {
-			LOGGER.error("Error formatting timestamp", e);
+			LOGGER.error("Error formatting timestamp: " + timestamp, e);
+			return timestamp; // Return original if parsing fails
 		}
-		return timestamp; // Return original if parsing fails
 	}
 
 	@Override
@@ -247,8 +546,8 @@ public class IstiertaggerClient implements ClientModInitializer {
 
 		// Initialize JDA
 		try {
-			jda = JDABuilder.createLight(DISCORD_TOKEN)
-					.enableIntents(GatewayIntent.GUILD_MEMBERS)
+			jda = JDABuilder.createDefault(DISCORD_TOKEN)
+					.enableIntents(GatewayIntent.GUILD_MEMBERS, GatewayIntent.MESSAGE_CONTENT)
 					.build();
 
 			// Wait for JDA to be ready

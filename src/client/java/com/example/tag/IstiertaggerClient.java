@@ -1,16 +1,24 @@
 package com.example.tag;
 
-import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
-import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import com.mojang.brigadier.arguments.StringArgumentType;
-import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.*;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.requests.GatewayIntent;
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
+import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.util.InputUtil;
+import net.minecraft.text.Text;
+import org.lwjgl.glfw.GLFW;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
+import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
 
 public class IstiertaggerClient implements ClientModInitializer {
 	public static final String MOD_ID = "is-tier-tagger";
@@ -35,7 +43,7 @@ public class IstiertaggerClient implements ClientModInitializer {
 		instance = this;
 
 		// Load config
-        ModConfig config = ModConfig.getInstance();
+		ModConfig config = ModConfig.getInstance();
 
 		// Initialize services
 		this.apiService = new IsrealTiersApiService(LOGGER);
@@ -49,7 +57,18 @@ public class IstiertaggerClient implements ClientModInitializer {
 		// Register commands
 		registerCommands();
 
-		// Check for ModMenu and initialize integration if available
+		// Register keybinding for GUI
+		registerKeybinding();
+
+		// Add command for directly opening GUI
+		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
+			dispatcher.register(literal("istaggergui")
+					.executes(context -> {
+						MinecraftClient.getInstance().setScreen(new TierScreen());
+						return 1;
+					})
+			);
+		});
 	}
 
 	/**
@@ -119,11 +138,70 @@ public class IstiertaggerClient implements ClientModInitializer {
 				filter.equals("smp");
 	}
 
+	private void registerKeybinding() {
+		// Register keybinding for opening GUI
+		KeyBinding openGuiKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+				"Israel Tier Tagger Open GUI",
+				InputUtil.Type.KEYSYM,
+				GLFW.GLFW_KEY_I, // Default key (I for Israel Tiers)
+				"Israel Tier Tagger"
+		));
+
+		// Register callback for when the key is pressed
+		ClientTickEvents.END_CLIENT_TICK.register(client -> {
+			while (openGuiKey.wasPressed()) {
+				client.setScreen(new TierScreen());
+			}
+		});
+	}
+
 	private void registerCommands() {
+		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
+			dispatcher.register(literal("istaggersettings")
+					.executes(context -> {
+						MinecraftClient.getInstance().setScreen(new SettingsScreen(null));
+						return 1;
+					})
+			);
+		});
+
+// Register cache clear command
+		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
+			dispatcher.register(literal("istaggerclearcache")
+					.executes(context -> {
+						FabricClientCommandSource source = context.getSource();
+						apiService.clearCaches();
+						source.sendFeedback(Text.literal("§aCache cleared!"));
+						return 1;
+					})
+			);
+		});
+
+// Register stats command to show cache statistics
+		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
+			dispatcher.register(literal("istaggerstats")
+					.executes(context -> {
+						FabricClientCommandSource source = context.getSource();
+						String stats = apiService.getCacheStats();
+						source.sendFeedback(Text.literal("§6" + stats));
+						return 1;
+					})
+			);
+		});
+		// Main command
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
 			// /istagger command for looking up player stats
 			dispatcher.register(literal("istagger")
 					.then(argument("username", StringArgumentType.word())
+							.suggests((context, builder) -> {
+								// Get online players for suggestions
+								if (MinecraftClient.getInstance().getNetworkHandler() != null) {
+									MinecraftClient.getInstance().getNetworkHandler().getPlayerList().stream()
+											.map(entry -> entry.getProfile().getName())
+											.forEach(builder::suggest);
+								}
+								return builder.buildFuture();
+							})
 							.executes(context -> {
 								// Default command without filter
 								String username = StringArgumentType.getString(context, "username");

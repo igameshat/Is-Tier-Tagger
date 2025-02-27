@@ -1,17 +1,18 @@
 package com.example.tag;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import org.slf4j.Logger;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.text.SimpleDateFormat;
 import java.time.Duration;
+import java.util.Date;
 import java.util.function.BiConsumer;
-
-import org.slf4j.Logger;
-
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
 
 /**
  * Service class to handle all API requests to Israel Tiers and Mojang APIs
@@ -21,6 +22,7 @@ public class IsrealTiersApiService {
     private final HttpClient httpClient;
 
     private final Logger logger;
+    private final PlayerDataCache cache;
 
     // Tier points mapping
     private static final JsonObject TIER_POINTS = GSON.fromJson(
@@ -30,6 +32,7 @@ public class IsrealTiersApiService {
 
     public IsrealTiersApiService(Logger logger) {
         this.logger = logger;
+        this.cache = new PlayerDataCache(logger);
 
         // Initialize HTTP client with timeout from config
         ModConfig config = ModConfig.getInstance();
@@ -58,6 +61,13 @@ public class IsrealTiersApiService {
      * Fetch UUID from username using Mojang API
      */
     public String fetchUUID(String username) throws Exception {
+        // Check cache first
+        String cachedUuid = cache.getCachedUUID(username);
+        if (cachedUuid != null) {
+            logger.debug("Using cached UUID for {}: {}", username, cachedUuid);
+            return cachedUuid;
+        }
+
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("https://api.mojang.com/users/profiles/minecraft/" + username))
                 .GET()
@@ -69,7 +79,12 @@ public class IsrealTiersApiService {
         if (response.statusCode() == 200) {
             JsonObject jsonObject = GSON.fromJson(response.body(), JsonObject.class);
             String uuid = jsonObject.get("id").getAsString();
-            return uuid.replaceAll("(\\w{8})(\\w{4})(\\w{4})(\\w{4})(\\w{12})", "$1-$2-$3-$4-$5");
+            uuid = uuid.replaceAll("(\\w{8})(\\w{4})(\\w{4})(\\w{4})(\\w{12})", "$1-$2-$3-$4-$5");
+
+            // Cache the result
+            cache.cacheUUID(username, uuid);
+
+            return uuid;
         }
         return null;
     }
@@ -98,6 +113,14 @@ public class IsrealTiersApiService {
      * @param callback Callback with the fetched data and success status
      */
     public void fetchPlayerData(String uuid, BiConsumer<JsonObject, Boolean> callback) {
+        // Check cache first
+        JsonObject cachedData = cache.getCachedPlayerData(uuid);
+        if (cachedData != null) {
+            logger.debug("Using cached player data for {}", uuid);
+            callback.accept(cachedData, true);
+            return;
+        }
+
         try {
             HttpRequest request = createApiRequest(uuid)
                     .GET()
@@ -107,6 +130,10 @@ public class IsrealTiersApiService {
 
             if (response.statusCode() == 200) {
                 JsonObject data = GSON.fromJson(response.body(), JsonObject.class);
+
+                // Cache the result
+                cache.cachePlayerData(uuid, data);
+
                 callback.accept(data, true);
             } else {
                 callback.accept(null, false);
@@ -123,6 +150,14 @@ public class IsrealTiersApiService {
      * @param callback Callback with the fetched tiers and success status
      */
     public void fetchTierList(String filter, BiConsumer<JsonArray, Boolean> callback) {
+        // Check cache first
+        Object cachedTierList = cache.getCachedTierList(filter);
+        if (cachedTierList != null) {
+            logger.debug("Using cached tier list for filter {}", filter);
+            callback.accept((JsonArray) cachedTierList, true);
+            return;
+        }
+
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("https://api.israeltiers.com/api/tiers?filter=" + filter))
@@ -135,6 +170,10 @@ public class IsrealTiersApiService {
 
             if (response.statusCode() == 200) {
                 JsonArray tiers = GSON.fromJson(response.body(), JsonArray.class);
+
+                // Cache the result
+                cache.cacheTierList(filter, tiers);
+
                 callback.accept(tiers, true);
             } else {
                 callback.accept(null, false);
@@ -159,14 +198,22 @@ public class IsrealTiersApiService {
         return 0;
     }
 
+    public void clearCaches() {
+        cache.clearAllCaches();
+    }
+
+    public String getCacheStats() {
+        return cache.getStatistics();
+    }
+
     /**
      * Format Unix timestamp to human-readable date
      */
     public String formatUnixTimestamp(String timestamp) {
         try {
             long unixTime = Long.parseLong(timestamp);
-            java.util.Date date = new java.util.Date(unixTime * 1000L); // Convert to milliseconds
-            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+            Date date = new Date(unixTime * 1000L); // Convert to milliseconds
+            SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
             return sdf.format(date);
         } catch (Exception e) {
             logger.error("Error formatting timestamp: {}", timestamp, e);

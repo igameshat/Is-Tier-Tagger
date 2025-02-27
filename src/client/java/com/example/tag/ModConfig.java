@@ -8,21 +8,37 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * Simple configuration handler for the mod
+ * Enhanced configuration handler with UI customization options
  */
 public class ModConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final File CONFIG_FILE = FabricLoader.getInstance().getConfigDir().resolve("is-tier-tagger.json").toFile();
     private static ModConfig instance;
 
-    // Config settings
+    // Basic settings
     private boolean autoOpenBrowser = true;
     private int apiTimeoutSeconds = 20;
     private boolean colorfulOutput = true;
     private String defaultFilter = "none";
     private boolean discordEnabled = true;
+
+    // Cache settings
+    private int cacheDurationMinutes = 15;
+    private int tierListCacheDurationMinutes = 30;
+
+    // UI settings
+    private boolean compactMode = false;
+    private boolean showLeaderboard = true;
+    private int leaderboardEntries = 8;
+    private boolean useCustomColors = true;
+    private Map<String, String> colorScheme = new HashMap<>();
+
+    // Keybinding
+    private String openGuiKey = "key.keyboard.i";
 
     /**
      * Get singleton instance
@@ -40,7 +56,14 @@ public class ModConfig {
     private static ModConfig load() {
         if (CONFIG_FILE.exists()) {
             try (FileReader reader = new FileReader(CONFIG_FILE)) {
-                return GSON.fromJson(reader, ModConfig.class);
+                ModConfig config = GSON.fromJson(reader, ModConfig.class);
+
+                // Initialize default color scheme if not present
+                if (config.colorScheme == null || config.colorScheme.isEmpty()) {
+                    config.initializeDefaultColorScheme();
+                }
+
+                return config;
             } catch (IOException e) {
                 System.err.println("Failed to load config file: " + e.getMessage());
             }
@@ -48,8 +71,26 @@ public class ModConfig {
 
         // If loading fails or file doesn't exist, create a new config
         ModConfig config = new ModConfig();
+        config.initializeDefaultColorScheme();
         config.save();
         return config;
+    }
+
+    /**
+     * Initialize default color scheme
+     */
+    private void initializeDefaultColorScheme() {
+        colorScheme = new HashMap<>();
+        colorScheme.put("background", "#000000CC");
+        colorScheme.put("border", "#FFFFFFFF");
+        colorScheme.put("title", "#FFFFFF");
+        colorScheme.put("tab_active", "#4080FF");
+        colorScheme.put("tab_inactive", "#303030");
+        colorScheme.put("text_primary", "#FFFFFF");
+        colorScheme.put("text_secondary", "#AAAAAA");
+        colorScheme.put("text_error", "#FF5555");
+        colorScheme.put("tier_text", "#4080FF");
+        colorScheme.put("points_text", "#FFAA00");
     }
 
     /**
@@ -70,7 +111,7 @@ public class ModConfig {
         }
     }
 
-    // Getters and setters
+    // Getters and setters for basic settings
 
     public boolean isAutoOpenBrowser() {
         return autoOpenBrowser;
@@ -110,5 +151,105 @@ public class ModConfig {
 
     public void setDiscordEnabled(boolean discordEnabled) {
         this.discordEnabled = discordEnabled;
+    }
+
+    // Getters and setters for cache settings
+
+    public int getCacheDurationMinutes() {
+        return cacheDurationMinutes;
+    }
+
+    public void setCacheDurationMinutes(int cacheDurationMinutes) {
+        this.cacheDurationMinutes = cacheDurationMinutes;
+    }
+
+    public int getTierListCacheDurationMinutes() {
+        return tierListCacheDurationMinutes;
+    }
+
+    public void setTierListCacheDurationMinutes(int tierListCacheDurationMinutes) {
+        this.tierListCacheDurationMinutes = tierListCacheDurationMinutes;
+    }
+
+    // Getters and setters for UI settings
+
+    public boolean isCompactMode() {
+        return compactMode;
+    }
+
+    public void setCompactMode(boolean compactMode) {
+        this.compactMode = compactMode;
+    }
+
+    public boolean isShowLeaderboard() {
+        return showLeaderboard;
+    }
+
+    public void setShowLeaderboard(boolean showLeaderboard) {
+        this.showLeaderboard = showLeaderboard;
+    }
+
+    public int getLeaderboardEntries() {
+        return leaderboardEntries;
+    }
+
+    public void setLeaderboardEntries(int leaderboardEntries) {
+        this.leaderboardEntries = leaderboardEntries;
+    }
+
+    public boolean isUseCustomColors() {
+        return useCustomColors;
+    }
+
+    public void setUseCustomColors(boolean useCustomColors) {
+        this.useCustomColors = useCustomColors;
+    }
+
+    public Map<String, String> getColorScheme() {
+        return colorScheme;
+    }
+
+    public void setColorScheme(Map<String, String> colorScheme) {
+        this.colorScheme = colorScheme;
+    }
+
+    /**
+     * Get a color from the color scheme, with fallback to default
+     * @param key Color key
+     * @param defaultColor Default color if not found
+     * @return Integer representation of the color
+     */
+    public int getColor(String key, int defaultColor) {
+        if (!useCustomColors || colorScheme == null || !colorScheme.containsKey(key)) {
+            return defaultColor;
+        }
+
+        try {
+            String hexColor = colorScheme.get(key);
+            if (hexColor.startsWith("#")) {
+                hexColor = hexColor.substring(1);
+            }
+
+            // Parse color with alpha if it's 8 characters long
+            if (hexColor.length() == 8) {
+                return (int) Long.parseLong(hexColor, 16);
+            } else if (hexColor.length() == 6) {
+                return 0xFF000000 | Integer.parseInt(hexColor, 16);
+            }
+        } catch (NumberFormatException e) {
+            // Fall back to default if parsing fails
+        }
+
+        return defaultColor;
+    }
+
+    // Keybinding settings
+
+    public String getOpenGuiKey() {
+        return openGuiKey;
+    }
+
+    public void setOpenGuiKey(String openGuiKey) {
+        this.openGuiKey = openGuiKey;
     }
 }

@@ -1,21 +1,19 @@
 package com.example.tag;
 
-import java.util.AbstractMap;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-
-import org.slf4j.Logger;
-
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-
 import net.dv8tion.jda.api.JDA;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.text.ClickEvent;
 import net.minecraft.text.HoverEvent;
 import net.minecraft.text.Text;
+import org.slf4j.Logger;
+
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Manages UI display and formatting for the Israel Tiers mod
@@ -243,6 +241,7 @@ public class TierUIManager {
                             totalPoints += apiService.getPointsForTier(tier);
                         }
                     }
+
 
                     source.sendFeedback(Text.literal("§6Total Points: §d" + totalPoints));
 

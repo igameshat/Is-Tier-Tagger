@@ -36,9 +36,16 @@ public class ModConfig {
     private int leaderboardEntries = 8;
     private boolean useCustomColors = true;
     private Map<String, String> colorScheme = new HashMap<>();
+    // Add color scheme name to store the active theme name
+    private String colorSchemeName = "Default";
 
     // Keybinding
     private String openGuiKey = "key.keyboard.i";
+
+    // Added for new features
+    private boolean showNameTagEmoji = true;
+    private boolean trackPlayerHistory = true;
+    private int maxHistoryDays = 30;
 
     /**
      * Get singleton instance
@@ -61,6 +68,11 @@ public class ModConfig {
                 // Initialize default color scheme if not present
                 if (config.colorScheme == null || config.colorScheme.isEmpty()) {
                     config.initializeDefaultColorScheme();
+                }
+
+                // Initialize colorSchemeName to Default if not present
+                if (config.colorSchemeName == null || config.colorSchemeName.isEmpty()) {
+                    config.colorSchemeName = "Default";
                 }
 
                 return config;
@@ -211,6 +223,41 @@ public class ModConfig {
 
     public void setColorScheme(Map<String, String> colorScheme) {
         this.colorScheme = colorScheme;
+    }
+
+    // Add getter and setter for the color scheme name
+    public String getColorSchemeName() {
+        return colorSchemeName;
+    }
+
+    public void setColorSchemeName(String colorSchemeName) {
+        this.colorSchemeName = colorSchemeName;
+    }
+
+    // Added getters and setters for new features
+
+    public boolean isShowNameTagEmoji() {
+        return showNameTagEmoji;
+    }
+
+    public void setShowNameTagEmoji(boolean showNameTagEmoji) {
+        this.showNameTagEmoji = showNameTagEmoji;
+    }
+
+    public boolean isTrackPlayerHistory() {
+        return trackPlayerHistory;
+    }
+
+    public void setTrackPlayerHistory(boolean trackPlayerHistory) {
+        this.trackPlayerHistory = trackPlayerHistory;
+    }
+
+    public int getMaxHistoryDays() {
+        return maxHistoryDays;
+    }
+
+    public void setMaxHistoryDays(int maxHistoryDays) {
+        this.maxHistoryDays = maxHistoryDays;
     }
 
     /**

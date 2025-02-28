@@ -32,8 +32,11 @@ public class TierScreen extends Screen {
     private List<TabButton> gameTabs = new ArrayList<>();
     private String selectedTab = "crystal";
 
-    private ButtonWidget toggleLeaderboardButton;
+    private ButtonWidget viewHistoryButton;
+    // Initialize historyTracker statically
+    public static PlayerHistoryTracker historyTracker = new PlayerHistoryTracker(LoggerFactory.getLogger("PlayerHistoryTracker"));
 
+    private ButtonWidget customizeThemeButton;
 
     // State
     private JsonObject playerData;
@@ -65,21 +68,18 @@ public class TierScreen extends Screen {
         int leaderboardY = windowY;
         this.leaderboardWidget = new LeaderboardWidget(leaderboardX, leaderboardY, this.selectedTab, this.apiService);
 
-// Check config to see if leaderboard should be visible by default
+        // Set leaderboard visibility based on config
         ModConfig config = ModConfig.getInstance();
-        if (config.isShowLeaderboard()) {
-            this.leaderboardWidget.setVisible(true);
-        } else {
-            this.leaderboardWidget.setVisible(false);
-        }
+        this.leaderboardWidget.setVisible(config.isShowLeaderboard());
 
-// In the render method, after super.render(), add:
-// Render the leaderboard widget after all other elements
-        if (this.leaderboardWidget != null) {
-            config = ModConfig.getInstance();
-            this.leaderboardWidget.setVisible(config.isShowLeaderboard());
-        }
-
+        // Add customize theme button
+        this.customizeThemeButton = ButtonWidget.builder(
+                Text.literal("Customize Theme"),
+                (button) -> {
+                    this.client.setScreen(new ThemeSettingsScreen(this));
+                }
+        ).dimensions(windowX + 200, windowY + WINDOW_HEIGHT - 30, 100, 20).build();
+        this.addDrawableChild(this.customizeThemeButton);
 
         // Search field
         this.searchField = new TextFieldWidget(
@@ -95,22 +95,18 @@ public class TierScreen extends Screen {
 
         // Search button
         this.searchButton = ButtonWidget.builder(
-                        Text.literal("Search"),
-                        (button) -> this.searchPlayer(this.searchField.getText())
-                )
-                .dimensions(windowX + 230, windowY + 20, 70, 20)
-                .build();
+                Text.literal("Search"),
+                (button) -> this.searchPlayer(this.searchField.getText())
+        ).dimensions(windowX + 230, windowY + 20, 70, 20).build();
         this.addDrawableChild(this.searchButton);
 
         // Settings button
         ButtonWidget settingsButton = ButtonWidget.builder(
-                        Text.literal("Settings"),
-                        (button) -> {
-                            this.client.setScreen(new SettingsScreen(this));
-                        }
-                )
-                .dimensions(windowX + 20, windowY + WINDOW_HEIGHT - 30, 80, 20)
-                .build();
+                Text.literal("Settings"),
+                (button) -> {
+                    this.client.setScreen(new SettingsScreen(this));
+                }
+        ).dimensions(windowX + 20, windowY + WINDOW_HEIGHT - 30, 80, 20).build();
         this.addDrawableChild(settingsButton);
 
         // Game mode tabs
@@ -125,16 +121,35 @@ public class TierScreen extends Screen {
                     (button) -> {
                         this.selectedTab = GAME_MODES[index];
                         updateTabSelection();
+                        // Update leaderboard with new game mode
+                        if (this.leaderboardWidget != null) {
+                            this.leaderboardWidget.updateGameMode(this.selectedTab);
+                        }
                     },
                     GAME_MODES[i]
             );
             this.gameTabs.add(tabButton);
             this.addDrawableChild(tabButton);
+        }
 
+        // Add history button if history tracking is enabled
+        if (historyTracker != null && config.isTrackPlayerHistory()) {
+            this.viewHistoryButton = ButtonWidget.builder(
+                    Text.literal("View History"),
+                    button -> {
+                        if (this.currentUsername != null && this.playerData != null) {
+                            String uuid = this.playerData.get("id").getAsString();
+                            this.client.setScreen(new PlayerHistoryScreen(this, uuid, this.currentUsername, historyTracker));
+                        }
+                    }
+            ).dimensions(windowX + 110, windowY + WINDOW_HEIGHT - 30, 80, 20).build();
+            this.addDrawableChild(this.viewHistoryButton);
+
+            // Disable by default, only enable when a player is loaded
+            this.viewHistoryButton.active = false;
         }
 
         updateTabSelection();
-
     }
 
     private void updateTabSelection() {
@@ -168,6 +183,16 @@ public class TierScreen extends Screen {
                     MinecraftClient.getInstance().execute(() -> {
                         this.playerData = data;
                         this.isLoading = false;
+
+                        // Record player data for history if tracking is enabled
+                        if (data != null && ModConfig.getInstance().isTrackPlayerHistory() && historyTracker != null) {
+                            historyTracker.recordPlayerData(uuid, username, data);
+                        }
+
+                        // Enable history button if we have data
+                        if (this.viewHistoryButton != null) {
+                            this.viewHistoryButton.active = true;
+                        }
                     });
                 });
             } catch (Exception e) {
@@ -197,12 +222,18 @@ public class TierScreen extends Screen {
         int windowX = centerX - WINDOW_WIDTH / 2;
         int windowY = centerY - WINDOW_HEIGHT / 2;
 
+        // Apply theme colors
+        ModConfig config = ModConfig.getInstance();
+        int backgroundColor = config.getColor("background", 0xCC000000);
+        int borderColor = config.getColor("border", 0xFFFFFFFF);
+        int titleColor = config.getColor("title", 0xFFFFFF);
+
         // Draw window background
-        context.fill(windowX, windowY, windowX + WINDOW_WIDTH, windowY + WINDOW_HEIGHT, 0xCC000000);
-        context.drawBorder(windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, 0xFFFFFFFF);
+        context.fill(windowX, windowY, windowX + WINDOW_WIDTH, windowY + WINDOW_HEIGHT, backgroundColor);
+        context.drawBorder(windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, borderColor);
 
         // Draw title
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, centerX, windowY + 6, 0xFFFFFF);
+        context.drawCenteredTextWithShadow(this.textRenderer, this.title, centerX, windowY + 6, titleColor);
 
         // Draw loading indicator
         if (this.isLoading) {
@@ -233,7 +264,7 @@ public class TierScreen extends Screen {
         super.render(context, mouseX, mouseY, delta);
 
         // Render the leaderboard widget after all other elements
-        if (this.leaderboardWidget != null) {
+        if (this.leaderboardWidget != null && this.leaderboardWidget.isVisible()) {
             this.leaderboardWidget.render(context, mouseX, mouseY, delta);
         }
     }
@@ -273,13 +304,20 @@ public class TierScreen extends Screen {
             if (stats != null && !stats.isEmpty()) {
                 JsonObject gameStats = stats.get(0).getAsJsonObject();
 
+                // Get theme colors
+                ModConfig config = ModConfig.getInstance();
+                int textPrimaryColor = config.getColor("text_primary", 0xFFFFFF);
+                int textSecondaryColor = config.getColor("text_secondary", 0xAAAAAA);
+                int tierTextColor = config.getColor("tier_text", 0x4080FF);
+                int pointsTextColor = config.getColor("points_text", 0xFFAA00);
+
                 // Draw player name and UUID
                 context.drawTextWithShadow(
                         this.textRenderer,
-                        "Player: " + this.currentUsername,
+                        Text.literal("Player: " + this.currentUsername),
                         windowX + 20,
                         windowY + 80,
-                        0xFFFFFF
+                        textPrimaryColor
                 );
 
                 // Draw selected game mode stats
@@ -297,18 +335,26 @@ public class TierScreen extends Screen {
                     // Draw the tier information
                     context.drawTextWithShadow(
                             this.textRenderer,
-                            "Tier: " + tier + " (" + points + " points)",
+                            Text.literal("Tier: " + tier),
                             windowX + 20,
                             windowY + 100,
-                            0xFFFFFF
+                            tierTextColor
                     );
 
                     context.drawTextWithShadow(
                             this.textRenderer,
-                            "Last updated: " + formattedTime,
+                            Text.literal("Points: " + points),
                             windowX + 20,
-                            windowY + 120,
-                            0xAAAAAA
+                            windowY + 115,
+                            pointsTextColor
+                    );
+
+                    context.drawTextWithShadow(
+                            this.textRenderer,
+                            Text.literal("Last updated: " + formattedTime),
+                            windowX + 20,
+                            windowY + 130,
+                            textSecondaryColor
                     );
 
                     // Get rank from leaderboard if available
@@ -319,54 +365,40 @@ public class TierScreen extends Screen {
                                     this.textRenderer,
                                     Text.literal("Rank: #" + rank + " in " + this.selectedTab),
                                     windowX + 20,
-                                    windowY + 140,
-                                    0xFFAA00
-                            );
-                        }
-                    }
-
-                    if (this.leaderboardWidget != null) {
-                        int rank = this.leaderboardWidget.getPlayerRank(this.currentUsername);
-                        if (rank > 0) {
-                            context.drawTextWithShadow(
-                                    this.textRenderer,
-                                    Text.literal("Rank: #" + rank + " in " + this.selectedTab),
-                                    windowX + 20,
-                                    windowY + 140,
-                                    0xFFAA00
+                                    windowY + 145,
+                                    pointsTextColor
                             );
                         }
                     }
                 } else {
                     context.drawTextWithShadow(
                             this.textRenderer,
-                            "No data for " + TAB_LABELS[getTabIndex(this.selectedTab)],
+                            Text.literal("No data for " + TAB_LABELS[getTabIndex(this.selectedTab)]),
                             windowX + 20,
                             windowY + 100,
-                            0xFF5555
+                            config.getColor("text_error", 0xFF5555)
                     );
                 }
             } else {
                 context.drawTextWithShadow(
                         this.textRenderer,
-                        "No tier data available for this player",
+                        Text.literal("No tier data available for this player"),
                         windowX + 20,
                         windowY + 100,
-                        0xFF5555
+                        ModConfig.getInstance().getColor("text_error", 0xFF5555)
                 );
             }
         } catch (Exception e) {
             context.drawTextWithShadow(
                     this.textRenderer,
-                    "Error displaying player data: " + e.getMessage(),
+                    Text.literal("Error displaying player data: " + e.getMessage()),
                     windowX + 20,
                     windowY + 100,
-                    0xFF5555
+                    ModConfig.getInstance().getColor("text_error", 0xFF5555)
             );
             LOGGER.error("Error rendering player data", e);
         }
     }
-
 
     private int getTabIndex(String gameMode) {
         for (int i = 0; i < GAME_MODES.length; i++) {
@@ -380,6 +412,10 @@ public class TierScreen extends Screen {
     @Override
     public boolean shouldPause() {
         return false;
+    }
+
+    public static void setHistoryTracker(PlayerHistoryTracker tracker) {
+        historyTracker = tracker;
     }
 
     // Custom tab button class
@@ -403,13 +439,18 @@ public class TierScreen extends Screen {
 
         @Override
         public void renderWidget(DrawContext context, int mouseX, int mouseY, float delta) {
+            // Apply theme colors from config
+            ModConfig config = ModConfig.getInstance();
+            int activeTabColor = config.getColor("tab_active", 0xFF4080FF);
+            int inactiveTabColor = config.getColor("tab_inactive", 0xFF303030);
+
             // Custom rendering for tab buttons
             if (this.selected) {
                 // Selected tab styling
-                context.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), 0xFF4080FF);
+                context.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), activeTabColor);
             } else {
                 // Normal tab styling
-                context.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), 0xFF303030);
+                context.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), inactiveTabColor);
             }
 
             context.drawCenteredTextWithShadow(

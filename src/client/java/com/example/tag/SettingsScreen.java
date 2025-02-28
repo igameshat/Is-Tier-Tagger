@@ -29,6 +29,8 @@ public class SettingsScreen extends Screen {
     private ButtonWidget discordEnabledButton;
     private ButtonWidget showLeaderboardButton;
     private ButtonWidget useCustomColorsButton;
+    private ButtonWidget showNameTagEmojiButton;
+    private ButtonWidget trackPlayerHistoryButton;
 
     private TextFieldWidget apiTimeoutField;
     private TextFieldWidget cacheDurationField;
@@ -41,6 +43,8 @@ public class SettingsScreen extends Screen {
     private boolean discordEnabled;
     private boolean showLeaderboard;
     private boolean useCustomColors;
+    private boolean showNameTagEmoji;
+    private boolean trackPlayerHistory;
 
     private int apiTimeoutSeconds;
     private int cacheDurationMinutes;
@@ -59,6 +63,8 @@ public class SettingsScreen extends Screen {
         this.discordEnabled = config.isDiscordEnabled();
         this.showLeaderboard = config.isShowLeaderboard();
         this.useCustomColors = config.isUseCustomColors();
+        this.showNameTagEmoji = config.isShowNameTagEmoji();
+        this.trackPlayerHistory = config.isTrackPlayerHistory();
 
         this.apiTimeoutSeconds = config.getApiTimeoutSeconds();
         this.cacheDurationMinutes = config.getCacheDurationMinutes();
@@ -78,59 +84,81 @@ public class SettingsScreen extends Screen {
         // Toggle buttons for boolean options
         int buttonY = windowY + 35;
 
-        // Button spacing SPACING
+        // Button spacing and sizing
         int buttonSpacing = 22;
-        int buttonWidth = 150;
+        int toggleButtonWidth = 150;
+        int leftColumnX = windowX + (WINDOW_WIDTH / 4) - (toggleButtonWidth / 2);
+        int rightColumnX = windowX + (WINDOW_WIDTH * 3 / 4) - (toggleButtonWidth / 2);
 
-        // Auto Open Browser toggle
+        // Auto Open Browser toggle - left column
         this.autoOpenBrowserButton = ButtonWidget.builder(
                 Text.literal("Auto Open Browser: " + (this.autoOpenBrowser ? "ON" : "OFF")),
                 button -> {
                     this.autoOpenBrowser = !this.autoOpenBrowser;
                     button.setMessage(Text.literal("Auto Open Browser: " + (this.autoOpenBrowser ? "ON" : "OFF")));
                 }
-        ).dimensions(windowX + 20, buttonY, buttonWidth, 20).build();
+        ).dimensions(leftColumnX, buttonY, toggleButtonWidth, 20).build();
         this.addDrawableChild(this.autoOpenBrowserButton);
 
-        // Colorful Output toggle
+        // Colorful Output toggle - left column
         this.colorfulOutputButton = ButtonWidget.builder(
                 Text.literal("Colorful Output: " + (this.colorfulOutput ? "ON" : "OFF")),
                 button -> {
                     this.colorfulOutput = !this.colorfulOutput;
                     button.setMessage(Text.literal("Colorful Output: " + (this.colorfulOutput ? "ON" : "OFF")));
                 }
-        ).dimensions(windowX + 20, buttonY + buttonSpacing, buttonWidth, 20).build();
+        ).dimensions(leftColumnX, buttonY + buttonSpacing, toggleButtonWidth, 20).build();
         this.addDrawableChild(this.colorfulOutputButton);
 
-        // Discord Enabled toggle
+        // Discord Enabled toggle - left column
         this.discordEnabledButton = ButtonWidget.builder(
                 Text.literal("Enable Discord: " + (this.discordEnabled ? "ON" : "OFF")),
                 button -> {
                     this.discordEnabled = !this.discordEnabled;
                     button.setMessage(Text.literal("Enable Discord: " + (this.discordEnabled ? "ON" : "OFF")));
                 }
-        ).dimensions(windowX + 20, buttonY + buttonSpacing * 2, buttonWidth, 20).build();
+        ).dimensions(leftColumnX, buttonY + buttonSpacing * 2, toggleButtonWidth, 20).build();
         this.addDrawableChild(this.discordEnabledButton);
 
-        // Show Leaderboard toggle
+        // Show Leaderboard toggle - right column
         this.showLeaderboardButton = ButtonWidget.builder(
                 Text.literal("Show Leaderboard: " + (this.showLeaderboard ? "ON" : "OFF")),
                 button -> {
                     this.showLeaderboard = !this.showLeaderboard;
                     button.setMessage(Text.literal("Show Leaderboard: " + (this.showLeaderboard ? "ON" : "OFF")));
                 }
-        ).dimensions(windowX + 180, buttonY, buttonWidth, 20).build();
+        ).dimensions(rightColumnX, buttonY, toggleButtonWidth, 20).build();
         this.addDrawableChild(this.showLeaderboardButton);
 
-        // Use Custom Colors toggle
+        // Use Custom Colors toggle - right column
         this.useCustomColorsButton = ButtonWidget.builder(
                 Text.literal("Use Custom Colors: " + (this.useCustomColors ? "ON" : "OFF")),
                 button -> {
                     this.useCustomColors = !this.useCustomColors;
                     button.setMessage(Text.literal("Use Custom Colors: " + (this.useCustomColors ? "ON" : "OFF")));
                 }
-        ).dimensions(windowX + 180, buttonY + buttonSpacing, buttonWidth, 20).build();
+        ).dimensions(rightColumnX, buttonY + buttonSpacing, toggleButtonWidth, 20).build();
         this.addDrawableChild(this.useCustomColorsButton);
+
+        // Show Name Tag Emoji toggle
+        this.showNameTagEmojiButton = ButtonWidget.builder(
+                Text.literal("Show Tier Emoji: " + (this.showNameTagEmoji ? "ON" : "OFF")),
+                button -> {
+                    this.showNameTagEmoji = !this.showNameTagEmoji;
+                    button.setMessage(Text.literal("Show Tier Emoji: " + (this.showNameTagEmoji ? "ON" : "OFF")));
+                }
+        ).dimensions(leftColumnX, buttonY + buttonSpacing * 3, toggleButtonWidth, 20).build();
+        this.addDrawableChild(this.showNameTagEmojiButton);
+
+        // Track Player History toggle
+        this.trackPlayerHistoryButton = ButtonWidget.builder(
+                Text.literal("Track History: " + (this.trackPlayerHistory ? "ON" : "OFF")),
+                button -> {
+                    this.trackPlayerHistory = !this.trackPlayerHistory;
+                    button.setMessage(Text.literal("Track History: " + (this.trackPlayerHistory ? "ON" : "OFF")));
+                }
+        ).dimensions(rightColumnX, buttonY + buttonSpacing * 2, toggleButtonWidth, 20).build();
+        this.addDrawableChild(this.trackPlayerHistoryButton);
 
         // Text fields for numerical values
         int textFieldY = buttonY + buttonSpacing * 3 + 10;
@@ -190,30 +218,32 @@ public class SettingsScreen extends Screen {
         this.leaderboardEntriesField.setEditableColor(0xFFFFFF);
         this.addDrawableChild(this.leaderboardEntriesField);
 
-        // Buttons
-        int buttonsY = windowY + WINDOW_HEIGHT - 30;
-        int buttonsWidth = 100;
+        // Bottom buttons - centered and properly spaced
+        int bottomButtonY = windowY + WINDOW_HEIGHT - 30;
+        int bottomButtonWidth = 100;
+        int bottomButtonSpacing = 10;
+        int totalButtonsWidth = (bottomButtonWidth * 3) + (bottomButtonSpacing * 2);
+        int bottomButtonsStartX = centerX - (totalButtonsWidth / 2);
 
-        //SPACING spacing between buttons
-        int buttonsSpacing = 1;
-
-        // Only display Done button (which will automatically save), Reset and Clear Cache
+        // Done button
         this.cancelButton = ButtonWidget.builder(
                 Text.literal("Done"),
                 button -> this.close()
-        ).dimensions(windowX + 20, buttonsY, buttonsWidth, 20).build();
+        ).dimensions(bottomButtonsStartX, bottomButtonY, bottomButtonWidth, 20).build();
         this.addDrawableChild(this.cancelButton);
 
+        // Reset to Default button
         this.resetButton = ButtonWidget.builder(
                 Text.literal("Reset to Default"),
                 button -> this.resetToDefault()
-        ).dimensions(windowX + 20 + buttonsWidth + buttonsSpacing, buttonsY, buttonsWidth + 20, 20).build();
+        ).dimensions(bottomButtonsStartX + bottomButtonWidth + bottomButtonSpacing, bottomButtonY, bottomButtonWidth, 20).build();
         this.addDrawableChild(this.resetButton);
 
+        // Clear Cache button
         this.clearCacheButton = ButtonWidget.builder(
                 Text.literal("Clear Cache"),
                 button -> this.clearCache()
-        ).dimensions(windowX + 20 + buttonsWidth + buttonsSpacing + buttonsWidth + 20 + buttonsSpacing, buttonsY, buttonsWidth, 20).build();
+        ).dimensions(bottomButtonsStartX + (bottomButtonWidth * 2) + (bottomButtonSpacing * 2), bottomButtonY, bottomButtonWidth, 20).build();
         this.addDrawableChild(this.clearCacheButton);
     }
 
@@ -286,6 +316,8 @@ public class SettingsScreen extends Screen {
         this.discordEnabled = true;
         this.showLeaderboard = true;
         this.useCustomColors = true;
+        this.showNameTagEmoji = true;
+        this.trackPlayerHistory = true;
 
         this.apiTimeoutSeconds = 20;
         this.cacheDurationMinutes = 15;
@@ -298,6 +330,8 @@ public class SettingsScreen extends Screen {
         this.discordEnabledButton.setMessage(Text.literal("Enable Discord: " + (this.discordEnabled ? "ON" : "OFF")));
         this.showLeaderboardButton.setMessage(Text.literal("Show Leaderboard: " + (this.showLeaderboard ? "ON" : "OFF")));
         this.useCustomColorsButton.setMessage(Text.literal("Use Custom Colors: " + (this.useCustomColors ? "ON" : "OFF")));
+        this.showNameTagEmojiButton.setMessage(Text.literal("Show Tier Emoji: " + (this.showNameTagEmoji ? "ON" : "OFF")));
+        this.trackPlayerHistoryButton.setMessage(Text.literal("Track History: " + (this.trackPlayerHistory ? "ON" : "OFF")));
 
         this.apiTimeoutField.setText(String.valueOf(this.apiTimeoutSeconds));
         this.cacheDurationField.setText(String.valueOf(this.cacheDurationMinutes));
@@ -334,6 +368,8 @@ public class SettingsScreen extends Screen {
         config.setDiscordEnabled(this.discordEnabled);
         config.setShowLeaderboard(this.showLeaderboard);
         config.setUseCustomColors(this.useCustomColors);
+        config.setShowNameTagEmoji(this.showNameTagEmoji);
+        config.setTrackPlayerHistory(this.trackPlayerHistory);
 
         config.setApiTimeoutSeconds(this.apiTimeoutSeconds);
         config.setCacheDurationMinutes(this.cacheDurationMinutes);

@@ -1,10 +1,14 @@
 package com.example.tag;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -12,6 +16,7 @@ import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
@@ -20,20 +25,24 @@ import org.slf4j.LoggerFactory;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
 
+@Environment(EnvType.CLIENT)
 public class IstiertaggerClient implements ClientModInitializer {
 	public static final String MOD_ID = "is-tier-tagger";
 	private static final Logger LOGGER = LoggerFactory.getLogger("IstiertaggerClient");
 
 	private static JDA jda;
 
-	// The token should be stored securely and not in source code
-	private static final String DISCORD_TOKEN = ""
+	private static final String DISCORD_TOKEN = "";
 
 	private IsrealTiersApiService apiService;
 	private TierUIManager uiManager;
 
-    // Singleton instance
+	// Singleton instance
 	private static IstiertaggerClient instance;
+
+	private TierDisplayManager tierDisplayManager;
+	private PlayerHistoryTracker historyTracker;
+
 
 	@Override
 	public void onInitializeClient() {
@@ -45,9 +54,24 @@ public class IstiertaggerClient implements ClientModInitializer {
 		// Load config
 		ModConfig config = ModConfig.getInstance();
 
+		// Initialize history tracker
+		this.historyTracker = new PlayerHistoryTracker(LOGGER);
+		TierScreen.setHistoryTracker(this.historyTracker);
+
+		// Initialize theme manager
+		ThemeManager themeManager = ThemeManager.getInstance();
+		LOGGER.info("Initialized theme manager with {} themes", themeManager.getThemes().size());
+
+		// Initialize context menu handler
+		ContextMenuHandler menuHandler = ContextMenuHandler.getInstance();
+		LOGGER.info("Initialized context menu handler");
+
 		// Initialize services
 		this.apiService = new IsrealTiersApiService(LOGGER);
 		this.uiManager = new TierUIManager(LOGGER);
+
+		// Initialize tier display manager
+		this.tierDisplayManager = new TierDisplayManager(LOGGER, this.historyTracker, this.apiService);
 
 		// Initialize Discord JDA if enabled in config
 		if (config.isDiscordEnabled()) {
@@ -57,7 +81,7 @@ public class IstiertaggerClient implements ClientModInitializer {
 		// Register commands
 		registerCommands();
 
-		// Register keybinding for GUI
+		// Register keybinding
 		registerKeybinding();
 
 		// Add command for directly opening GUI
@@ -67,6 +91,63 @@ public class IstiertaggerClient implements ClientModInitializer {
 						MinecraftClient.getInstance().setScreen(new TierScreen());
 						return 1;
 					})
+			);
+		});
+
+		// Add command for theme settings
+		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
+			dispatcher.register(literal("istaggerthemes")
+					.executes(context -> {
+						MinecraftClient.getInstance().setScreen(new ThemeSettingsScreen(null));
+						return 1;
+					})
+			);
+		});
+
+		// Add command for player comparison
+		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
+			dispatcher.register(literal("istaggercompare")
+					.executes(context -> {
+						MinecraftClient.getInstance().setScreen(new PlayerComparisonScreen());
+						return 1;
+					})
+					.then(argument("player1", StringArgumentType.word())
+							.executes(context -> {
+								PlayerComparisonScreen screen = new PlayerComparisonScreen();
+								MinecraftClient.getInstance().setScreen(screen);
+
+								// Pre-fill player1 field
+								String player1 = StringArgumentType.getString(context, "player1");
+								if (screen.player1Field != null) {
+									screen.player1Field.setText(player1);
+								}
+
+								return 1;
+							})
+							.then(argument("player2", StringArgumentType.word())
+									.executes(context -> {
+										PlayerComparisonScreen screen = new PlayerComparisonScreen();
+										MinecraftClient.getInstance().setScreen(screen);
+
+										// Pre-fill both player fields
+										String player1 = StringArgumentType.getString(context, "player1");
+										String player2 = StringArgumentType.getString(context, "player2");
+
+										if (screen.player1Field != null) {
+											screen.player1Field.setText(player1);
+										}
+
+										if (screen.player2Field != null) {
+											screen.player2Field.setText(player2);
+										}
+
+										// Trigger comparison
+										screen.comparePlayers();
+
+										return 1;
+									})
+							)
+					)
 			);
 		});
 	}
@@ -138,6 +219,40 @@ public class IstiertaggerClient implements ClientModInitializer {
 				filter.equals("smp");
 	}
 
+
+	/**
+	 * Append tier emoji to player name
+	 * This method is called from the EntityNameTagMixin
+	 */
+	public Text appendTierToPlayerName(PlayerEntity player, Text originalName) {
+		if (player == null || !ModConfig.getInstance().isShowNameTagEmoji()) {
+			return originalName;
+		}
+
+		try {
+			String uuid = player.getUuid().toString();
+			String username = player.getName().getString();
+
+			// Get emoji for this player
+			Text tierEmoji = TierDisplayManager.getPlayerTierEmoji(uuid, username);
+
+			// If no emoji available, return original name
+			if (tierEmoji.getString().isEmpty()) {
+				return originalName;
+			}
+
+			// Append emoji to name
+			return Text.empty()
+					.append(originalName)
+					.append(" ")
+					.append(tierEmoji);
+		} catch (Exception e) {
+			LOGGER.error("Error appending tier to player name", e);
+			return originalName;
+		}
+	}
+
+
 	private void registerKeybinding() {
 		// Register keybinding for opening GUI
 		KeyBinding openGuiKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
@@ -155,42 +270,49 @@ public class IstiertaggerClient implements ClientModInitializer {
 		});
 	}
 
+	public Text appendPlayerTierEmoji(PlayerEntity player, Text originalName) {
+		if (player == null || !ModConfig.getInstance().isShowNameTagEmoji()) {
+			return originalName;
+		}
+
+		try {
+			String uuid = player.getUuid().toString();
+			String username = player.getName().getString();
+
+			// Get emoji for this player
+			Text tierEmoji = TierDisplayManager.getPlayerTierEmoji(uuid, username);
+
+			// If no emoji available, return original name
+			if (tierEmoji.getString().isEmpty()) {
+				return originalName;
+			}
+
+			// Append emoji to name
+			return Text.empty()
+					.append(originalName)
+					.append(" ")
+					.append(tierEmoji);
+		} catch (Exception e) {
+			LOGGER.error("Error appending tier to player name", e);
+			return originalName;
+		}
+	}
+
+	public TierDisplayManager getTierDisplayManager() {
+		return tierDisplayManager;
+	}
+
+	public PlayerHistoryTracker getHistoryTracker() {
+		return historyTracker;
+	}
+
+	/**
+	 * Register essential commands for API interaction
+	 */
 	private void registerCommands() {
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
-			dispatcher.register(literal("istaggersettings")
-					.executes(context -> {
-						MinecraftClient.getInstance().setScreen(new SettingsScreen(null));
-						return 1;
-					})
-			);
-		});
 
-// Register cache clear command
-		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
-			dispatcher.register(literal("istaggerclearcache")
-					.executes(context -> {
-						FabricClientCommandSource source = context.getSource();
-						apiService.clearCaches();
-						source.sendFeedback(Text.literal("§aCache cleared!"));
-						return 1;
-					})
-			);
-		});
-
-// Register stats command to show cache statistics
-		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
-			dispatcher.register(literal("istaggerstats")
-					.executes(context -> {
-						FabricClientCommandSource source = context.getSource();
-						String stats = apiService.getCacheStats();
-						source.sendFeedback(Text.literal("§6" + stats));
-						return 1;
-					})
-			);
-		});
-		// Main command
-		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
-			// /istagger command for looking up player stats
+			// 1. Main command for looking up player stats
 			dispatcher.register(literal("istagger")
 					.then(argument("username", StringArgumentType.word())
 							.suggests((context, builder) -> {
@@ -220,6 +342,11 @@ public class IstiertaggerClient implements ClientModInitializer {
 
 										apiService.fetchPlayerData(uuid, (data, success) -> {
 											if (success) {
+												// Record player data if history tracking is enabled
+												if (ModConfig.getInstance().isTrackPlayerHistory()) {
+													historyTracker.recordPlayerData(uuid, username, data);
+												}
+
 												uiManager.displayPlayerData(source, username, data, null);
 											} else {
 												uiManager.openInBrowser(username, source);
@@ -272,7 +399,7 @@ public class IstiertaggerClient implements ClientModInitializer {
 							)
 					));
 
-			// /istaggertiers command for viewing tier lists
+			// 2. Command for viewing tier lists
 			dispatcher.register(literal("istaggertiers")
 					.then(argument("filter", StringArgumentType.word())
 							.executes(context -> {
@@ -305,6 +432,160 @@ public class IstiertaggerClient implements ClientModInitializer {
 								return 1;
 							})
 					));
+
+			// 3. Command for comparing players
+			dispatcher.register(literal("istaggercompare")
+					.then(argument("player1", StringArgumentType.word())
+							.then(argument("player2", StringArgumentType.word())
+									.executes(context -> {
+										FabricClientCommandSource source = context.getSource();
+										String player1 = StringArgumentType.getString(context, "player1");
+										String player2 = StringArgumentType.getString(context, "player2");
+
+										source.sendFeedback(uiManager.createFeedbackMessage(
+												"Comparing " + player1 + " and " + player2 + "..."));
+
+										new Thread(() -> {
+											try {
+												comparePlayersInChat(source, player1, player2);
+											} catch (Exception e) {
+												LOGGER.error("Error comparing players", e);
+												source.sendFeedback(uiManager.createFeedbackMessage(
+														"§cError comparing players: " + e.getMessage()));
+											}
+										}, "PlayerComparison-Thread").start();
+
+										return 1;
+									})
+							)
+					));
 		});
+	}
+
+	/**
+	 * Compare players and display results in chat
+	 */
+	private void comparePlayersInChat(FabricClientCommandSource source, String player1, String player2) {
+		try {
+			// Fetch UUIDs
+			String uuid1 = apiService.fetchUUID(player1);
+			String uuid2 = apiService.fetchUUID(player2);
+
+			if (uuid1 == null || uuid2 == null) {
+				source.sendFeedback(uiManager.createFeedbackMessage(
+						"§cCould not find one or both players."));
+				return;
+			}
+
+			// Fetch player data
+			apiService.fetchPlayerData(uuid1, (data1, success1) -> {
+				if (!success1) {
+					source.sendFeedback(uiManager.createFeedbackMessage(
+							"§cCould not fetch data for " + player1));
+					return;
+				}
+
+				apiService.fetchPlayerData(uuid2, (data2, success2) -> {
+					if (!success2) {
+						source.sendFeedback(uiManager.createFeedbackMessage(
+								"§cCould not fetch data for " + player2));
+						return;
+					}
+
+					// Both players data fetched successfully - display comparison
+					displayPlayerComparison(source, player1, player2, data1, data2);
+				});
+			});
+		} catch (Exception e) {
+			LOGGER.error("Error in player comparison", e);
+			source.sendFeedback(uiManager.createFeedbackMessage(
+					"§cError comparing players: " + e.getMessage()));
+		}
+	}
+
+	/**
+	 * Display player comparison in chat
+	 */
+	private void displayPlayerComparison(FabricClientCommandSource source, String player1, String player2,
+										 JsonObject data1, JsonObject data2) {
+		try {
+			// Extract userData
+			JsonObject userData1 = data1.get("userData").getAsJsonObject();
+			JsonObject userData2 = data2.get("userData").getAsJsonObject();
+
+			// Parse stats
+			JsonArray stats1 = userData1.getAsJsonArray("stats");
+			JsonArray stats2 = userData2.getAsJsonArray("stats");
+
+			if (stats1.isEmpty() || stats2.isEmpty()) {
+				source.sendFeedback(uiManager.createFeedbackMessage(
+						"§cNo stats available for one or both players."));
+				return;
+			}
+
+			JsonObject gameStats1 = stats1.get(0).getAsJsonObject();
+			JsonObject gameStats2 = stats2.get(0).getAsJsonObject();
+
+			// Display header
+			source.sendFeedback(Text.literal("§6=== Player Comparison: " + player1 + " vs " + player2 + " ==="));
+
+			// Calculate total points for each player
+			int totalPoints1 = 0;
+			int totalPoints2 = 0;
+
+			// Compare each game mode
+			for (String gameMode : new String[]{"crystal", "sword", "uhc", "pot", "smp"}) {
+				String gameModeDisplay = gameMode.substring(0, 1).toUpperCase() + gameMode.substring(1);
+
+				// Get player 1 tier and points
+				String tier1 = "N/A";
+				int points1 = 0;
+
+				JsonArray modeStats1 = gameStats1.has(gameMode) ? gameStats1.getAsJsonArray(gameMode) : null;
+				if (modeStats1 != null && !modeStats1.isEmpty()) {
+					JsonObject stat = modeStats1.get(0).getAsJsonObject();
+					tier1 = stat.has("tier") ? stat.get("tier").getAsString() : "N/A";
+					points1 = apiService.getPointsForTier(tier1);
+					totalPoints1 += points1;
+				}
+
+				// Get player 2 tier and points
+				String tier2 = "N/A";
+				int points2 = 0;
+
+				JsonArray modeStats2 = gameStats2.has(gameMode) ? gameStats2.getAsJsonArray(gameMode) : null;
+				if (modeStats2 != null && !modeStats2.isEmpty()) {
+					JsonObject stat = modeStats2.get(0).getAsJsonObject();
+					tier2 = stat.has("tier") ? stat.get("tier").getAsString() : "N/A";
+					points2 = apiService.getPointsForTier(tier2);
+					totalPoints2 += points2;
+				}
+
+				// Display game mode comparison
+				source.sendFeedback(Text.literal("§e" + gameModeDisplay + ": §b" +
+						player1 + " (" + tier1 + ", " + points1 + " pts) §7vs §b" +
+						player2 + " (" + tier2 + ", " + points2 + " pts)"));
+			}
+
+			// Display total scores
+			source.sendFeedback(Text.literal(""));
+			source.sendFeedback(Text.literal("§6Total Points:"));
+			source.sendFeedback(Text.literal("§b" + player1 + ": §d" + totalPoints1 + " pts"));
+			source.sendFeedback(Text.literal("§b" + player2 + ": §d" + totalPoints2 + " pts"));
+
+			// Display winner
+			if (totalPoints1 > totalPoints2) {
+				source.sendFeedback(Text.literal("§a" + player1 + " has " + (totalPoints1 - totalPoints2) + " more points"));
+			} else if (totalPoints2 > totalPoints1) {
+				source.sendFeedback(Text.literal("§a" + player2 + " has " + (totalPoints2 - totalPoints1) + " more points"));
+			} else {
+				source.sendFeedback(Text.literal("§aBoth players have equal points"));
+			}
+
+		} catch (Exception e) {
+			LOGGER.error("Error displaying comparison", e);
+			source.sendFeedback(uiManager.createFeedbackMessage(
+					"§cError displaying comparison: " + e.getMessage()));
+		}
 	}
 }

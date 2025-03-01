@@ -1,6 +1,6 @@
 package com.example.tag;
 
-import com.example.tag.TextRenderHelper;
+import com.example.tag.util.TextRenderHelper;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.client.MinecraftClient;

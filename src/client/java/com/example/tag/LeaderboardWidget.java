@@ -1,5 +1,6 @@
 package com.example.tag;
 
+import com.example.tag.util.TextRenderHelper;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.client.MinecraftClient;
@@ -137,18 +138,30 @@ public class LeaderboardWidget {
             return;
         }
 
+        // Get theme colors
+        ModConfig config = ModConfig.getInstance();
+        int backgroundColor = config.getColor("background", 0xCC000000);
+        int borderColor = config.getColor("border", 0xFFFFFFFF);
+        int textColor = config.getColor("text_primary", 0xFFFFFF);
+        int secondaryTextColor = config.getColor("text_secondary", 0xAAAAAA);
+        int tierTextColor = config.getColor("tier_text", 0x4080FF);
+        int pointsTextColor = config.getColor("points_text", 0xFFAA00);
+
         // Draw background
-        context.fill(x, y, x + WIDTH, y + HEIGHT, 0xCC000000);
-        context.drawBorder(x, y, WIDTH, HEIGHT, 0xFFFFFFFF);
+        context.fill(x, y, x + WIDTH, y + HEIGHT, backgroundColor);
+
+        // Draw border manually for compatibility
+        drawBorder(context, x, y, WIDTH, HEIGHT, borderColor);
 
         // Draw title
         String title = gameMode.substring(0, 1).toUpperCase() + gameMode.substring(1) + " Leaderboard";
-        context.drawCenteredTextWithShadow(
+        TextRenderHelper.drawCenteredText(
+                context,
                 MinecraftClient.getInstance().textRenderer,
-                Text.literal(title),
+                title,
                 x + WIDTH / 2,
                 y + 10,
-                0xFFFFFF
+                textColor
         );
 
         // Render buttons
@@ -162,53 +175,63 @@ public class LeaderboardWidget {
 
         // Draw loading indicator or entries
         if (isLoading) {
-            context.drawCenteredTextWithShadow(
+            TextRenderHelper.drawCenteredText(
+                    context,
                     MinecraftClient.getInstance().textRenderer,
-                    Text.literal("Loading..."),
+                    "Loading...",
                     x + WIDTH / 2,
                     y + 80,
-                    0xAAAAAA
+                    secondaryTextColor
             );
         } else if (entries.isEmpty()) {
-            context.drawCenteredTextWithShadow(
+            TextRenderHelper.drawCenteredText(
+                    context,
                     MinecraftClient.getInstance().textRenderer,
-                    Text.literal("No data available"),
+                    "No data available",
                     x + WIDTH / 2,
                     y + 80,
-                    0xAAAAAA
+                    secondaryTextColor
             );
         } else {
             // Draw column headers
-            context.drawTextWithShadow(
+            TextRenderHelper.drawText(
+                    context,
                     MinecraftClient.getInstance().textRenderer,
-                    Text.literal("#"),
+                    "#",
                     x + 10,
                     y + 30,
-                    0xAAAAAA
+                    secondaryTextColor,
+                    true
             );
 
-            context.drawTextWithShadow(
+            TextRenderHelper.drawText(
+                    context,
                     MinecraftClient.getInstance().textRenderer,
-                    Text.literal("Player"),
+                    "Player",
                     x + 30,
                     y + 30,
-                    0xAAAAAA
+                    secondaryTextColor,
+                    true
             );
 
-            context.drawTextWithShadow(
+            TextRenderHelper.drawText(
+                    context,
                     MinecraftClient.getInstance().textRenderer,
-                    Text.literal("Tier"),
+                    "Tier",
                     x + 120,
                     y + 30,
-                    0xAAAAAA
+                    secondaryTextColor,
+                    true
             );
 
-            context.drawTextWithShadow(
+            TextRenderHelper.drawText(
+                    context,
                     MinecraftClient.getInstance().textRenderer,
-                    Text.literal("Points"),
+                    "Points",
                     x + 160,
                     y + 30,
-                    0xAAAAAA
+                    secondaryTextColor,
+                    true
             );
 
             // Draw entries
@@ -218,12 +241,14 @@ public class LeaderboardWidget {
                 int entryY = startY + (i * ENTRY_HEIGHT);
 
                 // Draw rank
-                context.drawTextWithShadow(
+                TextRenderHelper.drawText(
+                        context,
                         MinecraftClient.getInstance().textRenderer,
-                        Text.literal("#" + (i + 1)),
+                        "#" + (i + 1),
                         x + 10,
                         entryY,
-                        0xFFFFFF
+                        textColor,
+                        true
                 );
 
                 // Draw player name (truncated if needed)
@@ -232,32 +257,58 @@ public class LeaderboardWidget {
                     name = name.substring(0, 10) + "..";
                 }
 
-                context.drawTextWithShadow(
+                TextRenderHelper.drawText(
+                        context,
                         MinecraftClient.getInstance().textRenderer,
-                        Text.literal(name),
+                        name,
                         x + 30,
                         entryY,
-                        0xFFFFFF
+                        textColor,
+                        true
                 );
 
                 // Draw tier
-                context.drawTextWithShadow(
+                TextRenderHelper.drawText(
+                        context,
                         MinecraftClient.getInstance().textRenderer,
-                        Text.literal(entry.getTier()),
+                        entry.getTier(),
                         x + 120,
                         entryY,
-                        0x4080FF
+                        tierTextColor,
+                        true
                 );
 
                 // Draw points
-                context.drawTextWithShadow(
+                TextRenderHelper.drawText(
+                        context,
                         MinecraftClient.getInstance().textRenderer,
-                        Text.literal(String.valueOf(entry.getPoints())),
+                        String.valueOf(entry.getPoints()),
                         x + 160,
                         entryY,
-                        0xFFAA00
+                        pointsTextColor,
+                        true
                 );
             }
+        }
+    }
+
+    /**
+     * Draw a border around a rectangle
+     */
+    private void drawBorder(DrawContext context, int x, int y, int width, int height, int color) {
+        try {
+            // Try the newer method first
+            context.drawBorder(x, y, width, height, color);
+        } catch (NoSuchMethodError e) {
+            // Fall back to manual border drawing
+            // Top
+            context.fill(x, y, x + width, y + 1, color);
+            // Bottom
+            context.fill(x, y + height - 1, x + width, y + height, color);
+            // Left
+            context.fill(x, y, x + 1, y + height, color);
+            // Right
+            context.fill(x + width - 1, y, x + width, y + height, color);
         }
     }
 

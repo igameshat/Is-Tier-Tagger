@@ -171,21 +171,23 @@ public class ThemeEditorScreen extends Screen {
         context.drawCenteredTextWithShadow(this.textRenderer, this.title, centerX, windowY + 10, titleColor);
 
         // Draw theme name label
-        context.drawTextWithShadow(
+        context.drawText(
                 this.textRenderer,
                 Text.literal("Theme Name:"),
                 windowX + 20,
                 windowY + 35,
-                textPrimaryColor
+                textPrimaryColor,
+                false
         );
 
         // Draw color entries area
-        context.drawTextWithShadow(
+        context.drawText(
                 this.textRenderer,
                 Text.literal("Theme Colors:"),
                 windowX + 20,
                 windowY + 60,
-                headerColor
+                headerColor,
+                false
         );
 
         // Draw color entries list area background and border
@@ -215,12 +217,13 @@ public class ThemeEditorScreen extends Screen {
 
             // Draw color key (label) with high contrast for readability
             String colorName = formatKeyName(entry.getKey());
-            context.drawTextWithShadow(
+            context.drawText(
                     this.textRenderer,
                     Text.literal(colorName),
                     listX + 10,
                     entryY + 8,
-                    0xFFFFFF // Always white for maximum clarity
+                    0xFFFFFF, // Always white for maximum clarity
+                    false
             );
 
             // Set field position
@@ -251,12 +254,13 @@ public class ThemeEditorScreen extends Screen {
             }
 
             // Draw description for this color setting
-            context.drawTextWithShadow(
+            context.drawText(
                     this.textRenderer,
                     Text.literal(getColorDescription(entry.getKey())),
                     listX + 10,
                     entryY + entryHeight + 2,
-                    0xCCCCCC  // Light gray
+                    0xCCCCCC,  // Light gray
+                    false
             );
         }
 
@@ -282,12 +286,13 @@ public class ThemeEditorScreen extends Screen {
 
         // Draw scroll hint if needed
         if (colorEntries.size() > maxVisibleEntries) {
-            context.drawTextWithShadow(
+            context.drawText(
                     this.textRenderer,
                     Text.literal("Scroll for more colors"),
                     windowX + listWidth - 120,
                     windowY + listHeight + 80,
-                    0xAAAAAA
+                    0xAAAAAA,
+                    false
             );
         }
     }

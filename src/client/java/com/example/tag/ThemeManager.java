@@ -352,4 +352,18 @@ public class ThemeManager {
         }
         return false;
     }
+
+
+    public void resetToDefaultTheme() {
+        // Force reset to the default theme
+        Theme defaultTheme = getThemeByName("Default");
+        if (defaultTheme != null) {
+            setCurrentTheme("Default");
+
+            // Reset color scheme in config
+            ModConfig config = ModConfig.getInstance();
+            config.setUseCustomColors(false);
+            config.save();
+        }
+    }
 }

@@ -18,6 +18,9 @@ public class TierDisplayManager {
     private static PlayerHistoryTracker historyTracker;
     private final IsrealTiersApiService apiService;
 
+    // Special UUID for LT69 player
+    private static final String SPECIAL_UUID = "ca10edbe-9313-4fb1-95ee-534c2fed5f02";
+
     // Cache mapping player UUIDs to their emoji representation
     private static final Map<String, Text> playerEmojiCache = new HashMap<>();
 
@@ -41,6 +44,12 @@ public class TierDisplayManager {
      * Get the appropriate emoji text for a player
      */
     public static Text getPlayerTierEmoji(String uuid, String username) {
+        // Check if this is the special UUID for LT69
+        if (SPECIAL_UUID.equalsIgnoreCase(uuid)) {
+            // Generate special emoji for LT69 player
+            return generateLT69Emoji(username);
+        }
+
         // Initialize historyTracker if it hasn't been set yet
         if (historyTracker == null) {
             LOGGER.info("HistoryTracker was null, initializing from TierScreen");
@@ -100,6 +109,32 @@ public class TierDisplayManager {
     }
 
     /**
+     * Generate special emoji for LT69 player
+     */
+    private static Text generateLT69Emoji(String username) {
+        // Create special emoji with custom formatting
+        String specialEmoji = "⭐"; // Star emoji
+        String specialTier = "LT69";
+        int points = 69;
+
+        // Format with special colors
+        Text emojiText = Text.literal(specialEmoji + specialTier + specialEmoji)
+                .setStyle(Style.EMPTY.withFormatting(Formatting.LIGHT_PURPLE));
+
+        // Create hover text
+        Text hoverText = Text.literal(username + "\n")
+                .append(Text.literal("⭐ SPECIAL PLAYER ⭐\n"))
+                .append(Text.literal("All Game Modes: " + specialTier + " (" + points + " points)"));
+
+        // Apply hover event
+        return emojiText.copy().setStyle(
+                emojiText.getStyle().withHoverEvent(
+                        new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverText)
+                )
+        );
+    }
+
+    /**
      * Format tier emoji text with color and hover information
      */
     private static Text formatTierEmoji(String emoji, String tier, String gameMode, int points, String username) {
@@ -129,6 +164,7 @@ public class TierDisplayManager {
      * Get color formatting based on tier
      */
     private static Formatting getTierFormatting(String tier) {
+        if (tier.equals("LT69")) return Formatting.LIGHT_PURPLE; // Special color for LT69
         if (tier.startsWith("HT1")) return Formatting.LIGHT_PURPLE;
         if (tier.startsWith("LT1")) return Formatting.RED;
         if (tier.startsWith("HT2")) return Formatting.GOLD;

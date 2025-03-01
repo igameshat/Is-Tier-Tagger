@@ -1,5 +1,6 @@
 package com.example.tag;
 
+import com.example.tag.util.TextRenderHelper;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -85,7 +86,7 @@ public class SettingsScreen extends Screen {
         int buttonY = windowY + 35;
 
         // Button spacing and sizing
-        int buttonSpacing = 22;
+        int buttonSpacing = 25;
         int toggleButtonWidth = 150;
         int leftColumnX = windowX + (WINDOW_WIDTH / 4) - (toggleButtonWidth / 2);
         int rightColumnX = windowX + (WINDOW_WIDTH * 3 / 4) - (toggleButtonWidth / 2);
@@ -118,6 +119,9 @@ public class SettingsScreen extends Screen {
                     button.setMessage(Text.literal("Enable Discord: " + (this.discordEnabled ? "ON" : "OFF")));
                 }
         ).dimensions(leftColumnX, buttonY + buttonSpacing * 2, toggleButtonWidth, 20).build();
+        if (isDiscordAvailable()) {
+            this.discordEnabled = false;
+        }
         this.addDrawableChild(this.discordEnabledButton);
 
         // Show Leaderboard toggle - right column
@@ -160,8 +164,8 @@ public class SettingsScreen extends Screen {
         ).dimensions(rightColumnX, buttonY + buttonSpacing * 2, toggleButtonWidth, 20).build();
         this.addDrawableChild(this.trackPlayerHistoryButton);
 
-        // Text fields for numerical values
-        int textFieldY = buttonY + buttonSpacing * 3 + 10;
+        // Text fields for numerical values - moved the Y position down to make space for labels
+        int textFieldY = buttonY + buttonSpacing * 4 + 10; // More space between toggle buttons and text fields
         int textFieldSpacing = 25;
         int labelWidth = 150;
         int fieldWidth = 50;
@@ -173,7 +177,7 @@ public class SettingsScreen extends Screen {
                 textFieldY,
                 fieldWidth,
                 20,
-                Text.literal("")
+                Text.literal("API Timeout")
         );
         this.apiTimeoutField.setText(String.valueOf(this.apiTimeoutSeconds));
         this.apiTimeoutField.setEditableColor(0xFFFFFF);
@@ -186,7 +190,7 @@ public class SettingsScreen extends Screen {
                 textFieldY + textFieldSpacing,
                 fieldWidth,
                 20,
-                Text.literal("")
+                Text.literal("Cache Duration")
         );
         this.cacheDurationField.setText(String.valueOf(this.cacheDurationMinutes));
         this.cacheDurationField.setEditableColor(0xFFFFFF);
@@ -199,7 +203,7 @@ public class SettingsScreen extends Screen {
                 textFieldY + textFieldSpacing * 2,
                 fieldWidth,
                 20,
-                Text.literal("")
+                Text.literal("Tier List Cache")
         );
         this.tierListCacheDurationField.setText(String.valueOf(this.tierListCacheDurationMinutes));
         this.tierListCacheDurationField.setEditableColor(0xFFFFFF);
@@ -212,7 +216,7 @@ public class SettingsScreen extends Screen {
                 textFieldY + textFieldSpacing * 3,
                 fieldWidth,
                 20,
-                Text.literal("")
+                Text.literal("Leaderboard Entries")
         );
         this.leaderboardEntriesField.setText(String.valueOf(this.leaderboardEntries));
         this.leaderboardEntriesField.setEditableColor(0xFFFFFF);
@@ -249,7 +253,7 @@ public class SettingsScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        // Render background
+        // Draw a darkened background
         try {
             renderBackground(context, mouseX, mouseY, delta);
         } catch (NoSuchMethodError e) {
@@ -262,51 +266,97 @@ public class SettingsScreen extends Screen {
         int windowX = centerX - WINDOW_WIDTH / 2;
         int windowY = centerY - WINDOW_HEIGHT / 2;
 
+        // Apply theme colors
+        ModConfig config = ModConfig.getInstance();
+        int backgroundColor = config.getColor("background", 0xCC000000);
+        int borderColor = config.getColor("border", 0xFFFFFFFF);
+        int titleColor = config.getColor("title", 0xFFFFFF);
+        int textPrimaryColor = config.getColor("text_primary", 0xFFFFFF);
+
         // Draw window background
-        context.fill(windowX, windowY, windowX + WINDOW_WIDTH, windowY + WINDOW_HEIGHT, 0xCC000000);
-        context.drawBorder(windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, 0xFFFFFFFF);
+        context.fill(windowX, windowY, windowX + WINDOW_WIDTH, windowY + WINDOW_HEIGHT, backgroundColor);
+        drawBorder(context, windowX, windowY, borderColor);
 
         // Draw title
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, centerX, windowY + 10, 0xFFFFFF);
+        TextRenderHelper.drawCenteredText(
+                context,
+                this.textRenderer,
+                this.title.getString(),
+                centerX,
+                windowY + 10,
+                titleColor
+        );
 
-        // Draw text field labels
-        int textFieldY = windowY + 35 + 25 * 3 + 10;
+        // Calculate Y positions to match text fields
+        int textFieldY = windowY + 35 + 25 * 4 + 10; // Match the position from init method
         int textFieldSpacing = 25;
 
+        // Draw text field labels
         context.drawTextWithShadow(
                 this.textRenderer,
-                Text.literal("API Timeout (seconds):"),
+                Text.literal("API Timeout (sec):"),
                 windowX + 20,
-                textFieldY + 5,
-                0xFFFFFF
+                textFieldY + 6,
+                textPrimaryColor
         );
 
         context.drawTextWithShadow(
                 this.textRenderer,
-                Text.literal("Cache Duration (minutes):"),
+                Text.literal("Cache Duration (min):"),
                 windowX + 20,
-                textFieldY + textFieldSpacing + 5,
-                0xFFFFFF
+                textFieldY + textFieldSpacing + 6,
+                textPrimaryColor
         );
 
         context.drawTextWithShadow(
                 this.textRenderer,
-                Text.literal("Tier List Cache (minutes):"),
+                Text.literal("Tier List Cache (min):"),
                 windowX + 20,
-                textFieldY + textFieldSpacing * 2 + 5,
-                0xFFFFFF
+                textFieldY + textFieldSpacing * 2 + 6,
+                textPrimaryColor
         );
 
         context.drawTextWithShadow(
                 this.textRenderer,
                 Text.literal("Leaderboard Entries:"),
                 windowX + 20,
-                textFieldY + textFieldSpacing * 3 + 5,
-                0xFFFFFF
+                textFieldY + textFieldSpacing * 3 + 6,
+                textPrimaryColor
         );
 
-        // Draw all widgets
+        // Add warning message if Discord is enabled but JDA is not available
+        if (this.discordEnabled && isDiscordAvailable()) {
+            context.drawTextWithShadow(
+                    this.textRenderer,
+                    Text.literal("§cDiscord library not found! Discord will be disabled."),
+                    windowX + 20,
+                    windowY + WINDOW_HEIGHT - 50,
+                    0xFF5555
+            );
+        }
+
+        // Render all widgets after drawing our custom content
         super.render(context, mouseX, mouseY, delta);
+    }
+
+    /**
+     * Draw a border around a rectangle
+     */
+    private void drawBorder(DrawContext context, int x, int y, int color) {
+        try {
+            // Try the newer method first
+            context.drawBorder(x, y, SettingsScreen.WINDOW_WIDTH, SettingsScreen.WINDOW_HEIGHT, color);
+        } catch (NoSuchMethodError e) {
+            // Fall back to manual border drawing
+            // Top
+            context.fill(x, y, x + SettingsScreen.WINDOW_WIDTH, y + 1, color);
+            // Bottom
+            context.fill(x, y + SettingsScreen.WINDOW_HEIGHT - 1, x + SettingsScreen.WINDOW_WIDTH, y + SettingsScreen.WINDOW_HEIGHT, color);
+            // Left
+            context.fill(x, y, x + 1, y + SettingsScreen.WINDOW_HEIGHT, color);
+            // Right
+            context.fill(x + SettingsScreen.WINDOW_WIDTH - 1, y, x + SettingsScreen.WINDOW_WIDTH, y + SettingsScreen.WINDOW_HEIGHT, color);
+        }
     }
 
     private void resetToDefault() {
@@ -339,6 +389,15 @@ public class SettingsScreen extends Screen {
         this.leaderboardEntriesField.setText(String.valueOf(this.leaderboardEntries));
     }
 
+    private boolean isDiscordAvailable() {
+        try {
+            Class.forName("net.dv8tion.jda.api.JDA");
+            return false;
+        } catch (ClassNotFoundException e) {
+            return true;
+        }
+    }
+
     private void clearCache() {
         if (apiService != null) {
             apiService.clearCaches();
@@ -365,7 +424,13 @@ public class SettingsScreen extends Screen {
         // Save to config
         config.setAutoOpenBrowser(this.autoOpenBrowser);
         config.setColorfulOutput(this.colorfulOutput);
+
+        // Only enable Discord if JDA is available
+        if (this.discordEnabled && isDiscordAvailable()) {
+            this.discordEnabled = false;
+        }
         config.setDiscordEnabled(this.discordEnabled);
+
         config.setShowLeaderboard(this.showLeaderboard);
         config.setUseCustomColors(this.useCustomColors);
         config.setShowNameTagEmoji(this.showNameTagEmoji);
@@ -394,6 +459,7 @@ public class SettingsScreen extends Screen {
     public void close() {
         // Auto-save settings when closing the screen
         saveSettings();
+        assert this.client != null;
         this.client.setScreen(this.parent);
     }
 

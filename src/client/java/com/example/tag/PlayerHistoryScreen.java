@@ -2,6 +2,7 @@ package com.example.tag;
 
 import com.example.tag.PlayerHistoryTracker.PlayerHistory;
 import com.example.tag.PlayerHistoryTracker.TierSnapshot;
+import com.example.tag.util.TextRenderHelper;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
@@ -102,12 +103,18 @@ public class PlayerHistoryScreen extends Screen {
         int windowX = centerX - WINDOW_WIDTH / 2;
         int windowY = centerY - WINDOW_HEIGHT / 2;
 
+        // Get theme colors
+        ModConfig config = ModConfig.getInstance();
+        int backgroundColor = config.getColor("background", 0xCC000000);
+        int borderColor = config.getColor("border", 0xFFFFFFFF);
+        int titleColor = config.getColor("title", 0xFFFFFF);
+
         // Draw window background
-        context.fill(windowX, windowY, windowX + WINDOW_WIDTH, windowY + WINDOW_HEIGHT, 0xCC000000);
-        context.drawBorder(windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, 0xFFFFFFFF);
+        context.fill(windowX, windowY, windowX + WINDOW_WIDTH, windowY + WINDOW_HEIGHT, backgroundColor);
+        drawBorder(context, windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, borderColor);
 
         // Draw title
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, centerX, windowY + 10, 0xFFFFFF);
+        TextRenderHelper.drawCenteredText(context, this.textRenderer, this.title.getString(), centerX, windowY + 10, titleColor);
 
         // Render history data
         renderHistoryData(context, windowX, windowY);
@@ -116,16 +123,44 @@ public class PlayerHistoryScreen extends Screen {
         super.render(context, mouseX, mouseY, delta);
     }
 
+    /**
+     * Draw a border around a rectangle
+     */
+    private void drawBorder(DrawContext context, int x, int y, int width, int height, int color) {
+        try {
+            // Try the newer method first
+            context.drawBorder(x, y, width, height, color);
+        } catch (NoSuchMethodError e) {
+            // Fall back to manual border drawing
+            // Top
+            context.fill(x, y, x + width, y + 1, color);
+            // Bottom
+            context.fill(x, y + height - 1, x + width, y + height, color);
+            // Left
+            context.fill(x, y, x + 1, y + height, color);
+            // Right
+            context.fill(x + width - 1, y, x + width, y + height, color);
+        }
+    }
+
     private void renderHistoryData(DrawContext context, int windowX, int windowY) {
         PlayerHistory history = historyTracker.getPlayerHistory(playerUuid);
 
+        // Get theme colors
+        ModConfig config = ModConfig.getInstance();
+        int textColor = config.getColor("text_primary", 0xFFFFFF);
+        int secondaryColor = config.getColor("text_secondary", 0xAAAAAA);
+        int tierColor = config.getColor("tier_text", 0x4080FF);
+        int pointsColor = config.getColor("points_text", 0xFFAA00);
+
         if (history == null) {
-            context.drawCenteredTextWithShadow(
+            TextRenderHelper.drawCenteredText(
+                    context,
                     this.textRenderer,
-                    Text.literal("No history data available for this player"),
+                    "No history data available for this player",
                     windowX + WINDOW_WIDTH / 2,
                     windowY + 120,
-                    0xAAAAAA
+                    secondaryColor
             );
             return;
         }
@@ -133,58 +168,69 @@ public class PlayerHistoryScreen extends Screen {
         List<TierSnapshot> snapshots = history.getTierSnapshots(selectedTab);
 
         if (snapshots.isEmpty()) {
-            context.drawCenteredTextWithShadow(
+            TextRenderHelper.drawCenteredText(
+                    context,
                     this.textRenderer,
-                    Text.literal("No history data for " + selectedTab),
+                    "No history data for " + selectedTab,
                     windowX + WINDOW_WIDTH / 2,
                     windowY + 120,
-                    0xAAAAAA
+                    secondaryColor
             );
             return;
         }
 
         // Draw current tier
         TierSnapshot latest = snapshots.get(snapshots.size() - 1);
-        context.drawTextWithShadow(
+        TextRenderHelper.drawText(
+                context,
                 this.textRenderer,
-                Text.literal("Current Tier: " + latest.getTier() + " (" + latest.getPoints() + " points)"),
+                "Current Tier: " + latest.getTier() + " (" + latest.getPoints() + " points)",
                 windowX + 20,
                 windowY + 60,
-                0xFFFFFF
+                textColor,
+                true
         );
 
-        context.drawTextWithShadow(
+        TextRenderHelper.drawText(
+                context,
                 this.textRenderer,
-                Text.literal("Last Updated: " + latest.getFormattedDate()),
+                "Last Updated: " + latest.getFormattedDate(),
                 windowX + 20,
                 windowY + 75,
-                0xAAAAAA
+                secondaryColor,
+                true
         );
 
         // Draw table headers
         int tableY = windowY + 100;
-        context.drawTextWithShadow(
+        TextRenderHelper.drawText(
+                context,
                 this.textRenderer,
-                Text.literal("Date"),
+                "Date",
                 windowX + 30,
                 tableY,
-                0xAAAAAA
+                secondaryColor,
+                true
         );
 
-        context.drawTextWithShadow(
+        TextRenderHelper.drawText(
+                context,
                 this.textRenderer,
-                Text.literal("Tier"),
+                "Tier",
                 windowX + 150,
                 tableY,
-                0xAAAAAA
+                secondaryColor,
+                true
         );
 
-        context.drawTextWithShadow(
+        TextRenderHelper.drawText(
+                context,
                 this.textRenderer,
-                Text.literal("Points"),
+                "Points",
                 windowX + 250,
                 tableY,
-                0xAAAAAA
+                secondaryColor,
+                true
         );
 
         // Draw history table
@@ -200,31 +246,37 @@ public class PlayerHistoryScreen extends Screen {
             int entryY = startY + (i - startIndex) * entryHeight;
 
             // Draw date
-            context.drawTextWithShadow(
+            TextRenderHelper.drawText(
+                    context,
                     this.textRenderer,
-                    Text.literal(snapshot.getFormattedDate()),
+                    snapshot.getFormattedDate(),
                     windowX + 30,
                     entryY,
-                    0xFFFFFF
+                    textColor,
+                    true
             );
 
             // Draw tier with color based on tier
-            int tierColor = getTierColor(snapshot.getTier());
-            context.drawTextWithShadow(
+            int tierTextColor = getTierColor(snapshot.getTier());
+            TextRenderHelper.drawText(
+                    context,
                     this.textRenderer,
-                    Text.literal(snapshot.getTier()),
+                    snapshot.getTier(),
                     windowX + 150,
                     entryY,
-                    tierColor
+                    tierTextColor,
+                    true
             );
 
             // Draw points
-            context.drawTextWithShadow(
+            TextRenderHelper.drawText(
+                    context,
                     this.textRenderer,
-                    Text.literal(String.valueOf(snapshot.getPoints())),
+                    String.valueOf(snapshot.getPoints()),
                     windowX + 250,
                     entryY,
-                    0xFFAA00
+                    pointsColor,
+                    true
             );
         }
 
@@ -247,12 +299,14 @@ public class PlayerHistoryScreen extends Screen {
                 trendColor = 0xFFFF55; // Yellow
             }
 
-            context.drawTextWithShadow(
+            TextRenderHelper.drawText(
+                    context,
                     this.textRenderer,
-                    Text.literal("Trend: " + trendText),
+                    "Trend: " + trendText,
                     windowX + 20,
                     windowY + WINDOW_HEIGHT - 60,
-                    trendColor
+                    trendColor,
+                    true
             );
         }
     }
@@ -298,18 +352,24 @@ public class PlayerHistoryScreen extends Screen {
 
         @Override
         public void renderWidget(DrawContext context, int mouseX, int mouseY, float delta) {
+            // Get theme colors
+            ModConfig config = ModConfig.getInstance();
+            int activeTabColor = config.getColor("tab_active", 0xFF4080FF);
+            int inactiveTabColor = config.getColor("tab_inactive", 0xFF303030);
+
             // Custom rendering for tab buttons
             if (this.selected) {
                 // Selected tab styling
-                context.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), 0xFF4080FF);
+                context.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), activeTabColor);
             } else {
                 // Normal tab styling
-                context.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), 0xFF303030);
+                context.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), inactiveTabColor);
             }
 
-            context.drawCenteredTextWithShadow(
+            TextRenderHelper.drawCenteredText(
+                    context,
                     MinecraftClient.getInstance().textRenderer,
-                    this.getMessage(),
+                    this.getMessage().getString(),
                     this.getX() + this.getWidth() / 2,
                     this.getY() + (this.getHeight() - 8) / 2,
                     this.selected ? 0xFFFFFF : 0xE0E0E0

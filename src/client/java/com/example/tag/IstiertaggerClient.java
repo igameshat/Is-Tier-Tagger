@@ -4,8 +4,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.dv8tion.jda.api.JDA;
-import net.dv8tion.jda.api.JDABuilder;
-import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -30,9 +28,11 @@ public class IstiertaggerClient implements ClientModInitializer {
 	public static final String MOD_ID = "is-tier-tagger";
 	private static final Logger LOGGER = LoggerFactory.getLogger("IstiertaggerClient");
 
-	private static JDA jda;
+	private static Object jda = null; // Changed from JDA to Object to avoid direct class reference
+	private static boolean discordAvailable = false;
 
-	private static final String DISCORD_TOKEN = "";
+	private static final String DISCORD_TOKEN = null;
+
 
 	private IsrealTiersApiService apiService;
 	private TierUIManager uiManager;
@@ -73,8 +73,25 @@ public class IstiertaggerClient implements ClientModInitializer {
 		// Initialize tier display manager
 		this.tierDisplayManager = new TierDisplayManager(LOGGER, this.historyTracker, this.apiService);
 
-		// Initialize Discord JDA if enabled in config
-		if (config.isDiscordEnabled()) {
+		// Check if Discord classes are available
+		try {
+			Class.forName("net.dv8tion.jda.api.JDABuilder");
+			discordAvailable = true;
+			LOGGER.info("Discord JDA library is available");
+		} catch (ClassNotFoundException e) {
+			discordAvailable = false;
+			LOGGER.warn("Discord JDA library not found - Discord features will be disabled");
+
+			// Update config to disable Discord if library is missing
+			if (config.isDiscordEnabled()) {
+				config.setDiscordEnabled(false);
+				config.save();
+				LOGGER.info("Automatically disabled Discord integration in config due to missing library");
+			}
+		}
+
+		// Initialize Discord JDA if enabled in config and libraries are available
+		if (config.isDiscordEnabled() && discordAvailable) {
 			initializeDiscord();
 		}
 
@@ -160,30 +177,57 @@ public class IstiertaggerClient implements ClientModInitializer {
 	}
 
 	/**
-	 * Initialize Discord connection
+	 * Initialize Discord connection using reflection to avoid direct class references
 	 */
 	public static void initializeDiscord() {
+		if (!discordAvailable) {
+			LOGGER.warn("Cannot initialize Discord - JDA library not available");
+			return;
+		}
+
 		String token = DISCORD_TOKEN;
 
 		if (token != null && !token.isEmpty()) {
 			try {
-				if (jda != null && jda.getStatus() == net.dv8tion.jda.api.JDA.Status.CONNECTED) {
-					LOGGER.info("Discord bot already initialized");
-					return;
+				// Use reflection to avoid direct class references
+				Class<?> jdaBuilderClass = Class.forName("net.dv8tion.jda.api.JDABuilder");
+				Class<?> gatewayIntentClass = Class.forName("net.dv8tion.jda.api.requests.GatewayIntent");
+				Class<?> jdaClass = Class.forName("net.dv8tion.jda.api.JDA");
+				Class<?> jdaStatusEnum = Class.forName("net.dv8tion.jda.api.JDA$Status");
+
+				// Check if JDA is already initialized and connected
+				if (jda != null) {
+					Object statusValue = jdaClass.getMethod("getStatus").invoke(jda);
+					Object connectedStatus = jdaStatusEnum.getField("CONNECTED").get(null);
+
+					if (statusValue.equals(connectedStatus)) {
+						LOGGER.info("Discord bot already initialized");
+						return;
+					}
 				}
 
-				jda = JDABuilder.createDefault(token)
-						.enableIntents(GatewayIntent.GUILD_MEMBERS, GatewayIntent.MESSAGE_CONTENT)
-						.build();
+				// Create JDABuilder
+				Object guildMembersIntent = gatewayIntentClass.getField("GUILD_MEMBERS").get(null);
+				Object messageContentIntent = gatewayIntentClass.getField("MESSAGE_CONTENT").get(null);
+				Object builder = jdaBuilderClass.getMethod("createDefault", String.class).invoke(null, token);
+
+				// Enable intents
+				jdaBuilderClass.getMethod("enableIntents", gatewayIntentClass, gatewayIntentClass)
+						.invoke(builder, guildMembersIntent, messageContentIntent);
+
+				// Build JDA
+				jda = jdaBuilderClass.getMethod("build").invoke(builder);
 
 				// Wait for JDA to be ready
-				jda.awaitReady();
+				jdaClass.getMethod("awaitReady").invoke(jda);
+
 				LOGGER.info("Discord bot initialized successfully");
 
 				// If UI manager exists, pass JDA instance to it
 				if (getInstance() != null && getInstance().uiManager != null) {
-					getInstance().uiManager.setJda(jda);
+					getInstance().uiManager.setJda((JDA) jda);
 				}
+
 			} catch (Exception e) {
 				LOGGER.error("Failed to initialize Discord bot", e);
 				jda = null;
@@ -194,13 +238,20 @@ public class IstiertaggerClient implements ClientModInitializer {
 	}
 
 	/**
-	 * Shut down the Discord connection
+	 * Shut down the Discord connection using reflection
 	 */
 	public static void shutdownDiscord() {
-		if (jda != null) {
-			jda.shutdown();
+		if (!discordAvailable || jda == null) {
+			return;
+		}
+
+		try {
+			Class<?> jdaClass = Class.forName("net.dv8tion.jda.api.JDA");
+			jdaClass.getMethod("shutdown").invoke(jda);
 			jda = null;
 			LOGGER.info("Discord bot shut down");
+		} catch (Exception e) {
+			LOGGER.error("Error shutting down Discord", e);
 		}
 	}
 
@@ -208,7 +259,22 @@ public class IstiertaggerClient implements ClientModInitializer {
 	 * Check if Discord is connected
 	 */
 	public static boolean isDiscordConnected() {
-		return jda != null && jda.getStatus() == net.dv8tion.jda.api.JDA.Status.CONNECTED;
+		if (!discordAvailable || jda == null) {
+			return false;
+		}
+
+		try {
+			Class<?> jdaClass = Class.forName("net.dv8tion.jda.api.JDA");
+			Class<?> statusEnum = Class.forName("net.dv8tion.jda.api.JDA$Status");
+
+			Object status = jdaClass.getMethod("getStatus").invoke(jda);
+			Object connectedStatus = statusEnum.getField("CONNECTED").get(null);
+
+			return status.equals(connectedStatus);
+		} catch (Exception e) {
+			LOGGER.error("Error checking Discord connection", e);
+			return false;
+		}
 	}
 
 	private boolean isValidFilter(String filter) {

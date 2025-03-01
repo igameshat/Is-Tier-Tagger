@@ -2,6 +2,7 @@ package com.example.tag;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import org.slf4j.Logger;
 
@@ -24,9 +25,12 @@ public class IsrealTiersApiService {
     private final Logger logger;
     private final PlayerDataCache cache;
 
+    // Special UUID for hardcoded player data
+    private static final String SPECIAL_UUID = "ca10edbe-9313-4fb1-95ee-534c2fed5f02";
+
     // Tier points mapping
     private static final JsonObject TIER_POINTS = GSON.fromJson(
-            "{ \"HT1\": 60, \"LT1\": 44, \"HT2\": 28, \"LT2\": 16, \"HT3\": 10, \"LT3\": 6, \"HT4\": 4, \"LT4\": 3, \"HT5\": 2, \"LT5\": 1 }",
+            "{ \"HT1\": 60, \"LT1\": 44, \"HT2\": 28, \"LT2\": 16, \"HT3\": 10, \"LT3\": 6, \"HT4\": 4, \"LT4\": 3, \"HT5\": 2, \"LT5\": 1, \"LT69\": 69 }",
             JsonObject.class
     );
 
@@ -108,11 +112,67 @@ public class IsrealTiersApiService {
     }
 
     /**
+     * Generate hardcoded player data with LT69 tier for the special UUID
+     */
+    private JsonObject generateHardcodedPlayerData(String uuid, String username) {
+        // Current timestamp in seconds
+        long timestamp = System.currentTimeMillis() / 1000;
+
+        // Create empty player data structure
+        JsonObject playerData = new JsonObject();
+        playerData.addProperty("id", uuid);
+
+        // Create userData object
+        JsonObject userData = new JsonObject();
+        userData.addProperty("discordId", "42069");
+
+        // Create stats array with a single item
+        JsonArray stats = new JsonArray();
+        JsonObject gameStats = new JsonObject();
+
+        // Add tier data for each game mode
+        for (String gameMode : new String[]{"crystal", "sword", "uhc", "pot", "smp"}) {
+            JsonArray modeStats = new JsonArray();
+            JsonObject tierData = new JsonObject();
+            tierData.addProperty("tier", "LT69");
+            tierData.addProperty("lastupdate", String.valueOf(timestamp));
+            modeStats.add(tierData);
+            gameStats.add(gameMode, modeStats);
+        }
+
+        stats.add(gameStats);
+        userData.add("stats", stats);
+        playerData.add("userData", userData);
+
+        logger.info("Generated hardcoded LT69 player data for {}", username);
+
+        return playerData;
+    }
+
+    /**
      * Fetch player data from Israel Tiers API
      * @param uuid Player UUID
      * @param callback Callback with the fetched data and success status
      */
     public void fetchPlayerData(String uuid, BiConsumer<JsonObject, Boolean> callback) {
+        // Check for special UUID for hardcoded player data
+        if (SPECIAL_UUID.equalsIgnoreCase(uuid)) {
+            try {
+                String username = fetchUsernameFromUUID(uuid);
+                JsonObject hardcodedData = generateHardcodedPlayerData(uuid, username);
+
+                // Cache the hardcoded data
+                cache.cachePlayerData(uuid, hardcodedData);
+
+                // Return via callback
+                callback.accept(hardcodedData, true);
+                return;
+            } catch (Exception e) {
+                logger.error("Error generating hardcoded player data", e);
+                // Fall through to normal API request if hardcoding fails
+            }
+        }
+
         // Check cache first
         JsonObject cachedData = cache.getCachedPlayerData(uuid);
         if (cachedData != null) {
@@ -154,7 +214,12 @@ public class IsrealTiersApiService {
         Object cachedTierList = cache.getCachedTierList(filter);
         if (cachedTierList != null) {
             logger.debug("Using cached tier list for filter {}", filter);
-            callback.accept((JsonArray) cachedTierList, true);
+            JsonArray tierList = (JsonArray) cachedTierList;
+
+            // Always ensure our special player is in cached results too
+            ensureSpecialPlayerInTierList(tierList, filter);
+
+            callback.accept(tierList, true);
             return;
         }
 
@@ -171,6 +236,9 @@ public class IsrealTiersApiService {
             if (response.statusCode() == 200) {
                 JsonArray tiers = GSON.fromJson(response.body(), JsonArray.class);
 
+                // Add our special player to the tier list
+                ensureSpecialPlayerInTierList(tiers, filter);
+
                 // Cache the result
                 cache.cacheTierList(filter, tiers);
 
@@ -181,6 +249,135 @@ public class IsrealTiersApiService {
         } catch (Exception e) {
             logger.error("Error fetching tier list", e);
             callback.accept(null, false);
+        }
+    }
+
+    /**
+     * Ensure special player is in the tier list
+     * This is the simplest approach - just add them at the beginning
+     */
+    private void ensureSpecialPlayerInTierList(JsonArray tiers, String filter) {
+        try {
+            // First check if player already exists - if so, update their tier
+            for (int i = 0; i < tiers.size(); i++) {
+                JsonObject player = tiers.get(i).getAsJsonObject();
+                if (player.has("minecraftUUID") &&
+                        SPECIAL_UUID.equalsIgnoreCase(player.get("minecraftUUID").getAsString())) {
+
+                    // Player exists - make sure they have LT69 tier
+                    updatePlayerTierToLT69(player, filter);
+
+                    // If they're not at index 0, we need to create a new list
+                    if (i > 0) {
+                        // Get username
+                        String username = player.has("username") ?
+                                player.get("username").getAsString() : "SpecialPlayer";
+
+                        // Remove from current position by creating new array
+                        JsonArray newTiers = new JsonArray();
+
+                        // Add special player first
+                        newTiers.add(player);
+
+                        // Then add all other players
+                        for (int j = 0; j < tiers.size(); j++) {
+                            if (j != i) { // Skip the player we already added
+                                newTiers.add(tiers.get(j));
+                            }
+                        }
+
+                        // Replace the original tier list by modifying each index
+                        for (int j = 0; j < tiers.size(); j++) {
+                            if (j < newTiers.size()) {
+                                // Replace with new element
+                                tiers.set(j, newTiers.get(j));
+                            }
+                        }
+                    }
+
+                    return;
+                }
+            }
+
+            // Player doesn't exist - create and add at beginning
+            String username;
+            try {
+                username = fetchUsernameFromUUID(SPECIAL_UUID);
+            } catch (Exception e) {
+                logger.error("Error fetching username for special UUID", e);
+                username = "SpecialPlayer";
+            }
+
+            // Create player object
+            JsonObject specialPlayer = new JsonObject();
+            specialPlayer.addProperty("minecraftUUID", SPECIAL_UUID);
+            specialPlayer.addProperty("username", username);
+
+            // Add tier data
+            JsonArray filterArray = new JsonArray();
+            JsonObject tierData = new JsonObject();
+            tierData.addProperty("tier", "LT69");
+            tierData.addProperty("lastupdate", String.valueOf(System.currentTimeMillis() / 1000));
+            filterArray.add(tierData);
+            specialPlayer.add(filter, filterArray);
+
+            // Create new array with special player at the beginning
+            JsonArray newTiers = new JsonArray();
+            newTiers.add(specialPlayer);
+
+            // Add all existing players
+            for (int i = 0; i < tiers.size(); i++) {
+                newTiers.add(tiers.get(i));
+            }
+
+            // Replace the original tier list content
+            // First, ensure we have the right number of elements
+            while (tiers.size() < newTiers.size()) {
+                // Add dummy elements if needed to make the arrays the same size
+                tiers.add(new JsonObject());
+            }
+
+            // Now replace each element
+            for (int i = 0; i < newTiers.size(); i++) {
+                tiers.set(i, newTiers.get(i));
+            }
+
+            logger.info("Added special player to {} tier list", filter);
+        } catch (Exception e) {
+            logger.error("Error adding special player to tier list", e);
+        }
+    }
+
+    /**
+     * Update a player's tier to LT69
+     */
+    private void updatePlayerTierToLT69(JsonObject player, String filter) {
+        try {
+            // Check if player has the requested filter
+            if (!player.has(filter) || !player.get(filter).isJsonArray()) {
+                // Create new filter array
+                JsonArray filterArray = new JsonArray();
+                JsonObject tierData = new JsonObject();
+                tierData.addProperty("tier", "LT69");
+                tierData.addProperty("lastupdate", String.valueOf(System.currentTimeMillis() / 1000));
+                filterArray.add(tierData);
+                player.add(filter, filterArray);
+            } else {
+                // Update existing filter array
+                JsonArray filterArray = player.getAsJsonArray(filter);
+                if (filterArray.size() > 0) {
+                    JsonObject tierData = filterArray.get(0).getAsJsonObject();
+                    tierData.addProperty("tier", "LT69");
+                } else {
+                    // Array exists but is empty
+                    JsonObject tierData = new JsonObject();
+                    tierData.addProperty("tier", "LT69");
+                    tierData.addProperty("lastupdate", String.valueOf(System.currentTimeMillis() / 1000));
+                    filterArray.add(tierData);
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error updating player tier", e);
         }
     }
 

@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public class TierScreen extends Screen {
-    // Create our own logger for this class
     private static final Logger LOGGER = LoggerFactory.getLogger("TierScreen");
 
     // Constants
@@ -33,7 +32,6 @@ public class TierScreen extends Screen {
     private String selectedTab = "crystal";
 
     private ButtonWidget viewHistoryButton;
-    // Initialize historyTracker statically
     public static PlayerHistoryTracker historyTracker = new PlayerHistoryTracker(LoggerFactory.getLogger("PlayerHistoryTracker"));
 
     private ButtonWidget customizeThemeButton;
@@ -41,6 +39,7 @@ public class TierScreen extends Screen {
     // State
     private JsonObject playerData;
     private String currentUsername;
+    private String currentUuid;
     private boolean isLoading = false;
 
     private LeaderboardWidget leaderboardWidget;
@@ -51,7 +50,6 @@ public class TierScreen extends Screen {
 
     public TierScreen() {
         super(Text.literal("Israel Tier Tagger"));
-        // Use our own logger instead of the one from IstiertaggerClient
         this.apiService = new IsrealTiersApiService(LOGGER);
     }
 
@@ -64,15 +62,14 @@ public class TierScreen extends Screen {
         int windowX = centerX - WINDOW_WIDTH / 2;
         int windowY = centerY - WINDOW_HEIGHT / 2;
 
-        int leaderboardX = windowX + WINDOW_WIDTH + 10; // Position it to the right of the main window
+        int leaderboardX = windowX + WINDOW_WIDTH + 10;
         int leaderboardY = windowY;
         this.leaderboardWidget = new LeaderboardWidget(leaderboardX, leaderboardY, this.selectedTab, this.apiService);
 
-        // Set leaderboard visibility based on config
         ModConfig config = ModConfig.getInstance();
         this.leaderboardWidget.setVisible(config.isShowLeaderboard());
 
-        // Add customize theme button
+        // Customize theme button
         this.customizeThemeButton = ButtonWidget.builder(
                 Text.literal("Customize Theme"),
                 (button) -> {
@@ -90,7 +87,7 @@ public class TierScreen extends Screen {
                 20,
                 Text.literal("Enter username")
         );
-        this.searchField.setMaxLength(16); // Minecraft username max length
+        this.searchField.setMaxLength(16);
         this.addDrawableChild(this.searchField);
 
         // Search button
@@ -111,7 +108,7 @@ public class TierScreen extends Screen {
 
         // Game mode tabs
         for (int i = 0; i < GAME_MODES.length; i++) {
-            final int index = i; // Need final variable for lambda
+            final int index = i;
             TabButton tabButton = new TabButton(
                     windowX + 20 + (i * 60),
                     windowY + 50,
@@ -121,7 +118,6 @@ public class TierScreen extends Screen {
                     (button) -> {
                         this.selectedTab = GAME_MODES[index];
                         updateTabSelection();
-                        // Update leaderboard with new game mode
                         if (this.leaderboardWidget != null) {
                             this.leaderboardWidget.updateGameMode(this.selectedTab);
                         }
@@ -174,9 +170,12 @@ public class TierScreen extends Screen {
                     this.isLoading = false;
                     MinecraftClient.getInstance().execute(() -> {
                         this.playerData = null;
+                        this.currentUuid = null;
                     });
                     return;
                 }
+
+                this.currentUuid = uuid;
 
                 apiService.fetchPlayerData(uuid, (data, success) -> {
                     // Execute on main thread to avoid threading issues
@@ -201,6 +200,7 @@ public class TierScreen extends Screen {
                 MinecraftClient.getInstance().execute(() -> {
                     this.isLoading = false;
                     this.playerData = null;
+                    this.currentUuid = null;
                 });
             }
         });
@@ -208,14 +208,8 @@ public class TierScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        // Use the proper method for your fabric version - if this one doesn't work,
-        // try super.renderBackground(context) or just fill the screen with a color
-        try {
-            renderBackground(context, mouseX, mouseY, delta);
-        } catch (NoSuchMethodError e) {
-            // Fallback for different API versions
-            context.fill(0, 0, this.width, this.height, 0x88000000);
-        }
+        // Render background with minimum processing
+        context.fill(0, 0, this.width, this.height, 0x88000000);
 
         int centerX = this.width / 2;
         int centerY = this.height / 2;
@@ -228,72 +222,73 @@ public class TierScreen extends Screen {
         int borderColor = config.getColor("border", 0xFFFFFFFF);
         int titleColor = config.getColor("title", 0xFFFFFF);
 
-        // Draw window background
+        // Draw window background with precise filling
         context.fill(windowX, windowY, windowX + WINDOW_WIDTH, windowY + WINDOW_HEIGHT, backgroundColor);
-        context.drawBorder(windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, borderColor);
 
-        // Draw title
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, centerX, windowY + 6, titleColor);
+        // Draw border manually for sharpness
+        context.fill(windowX, windowY, windowX + WINDOW_WIDTH, windowY + 1, borderColor);
+        context.fill(windowX, windowY + WINDOW_HEIGHT - 1, windowX + WINDOW_WIDTH, windowY + WINDOW_HEIGHT, borderColor);
+        context.fill(windowX, windowY, windowX + 1, windowY + WINDOW_HEIGHT, borderColor);
+        context.fill(windowX + WINDOW_WIDTH - 1, windowY, windowX + WINDOW_WIDTH, windowY + WINDOW_HEIGHT, borderColor);
 
-        // Draw loading indicator
+        // Draw title with precise rendering
+        String title = this.title.getString();
+        int titleWidth = this.textRenderer.getWidth(title);
+        int titleX = centerX - titleWidth / 2;
+        int titleY = windowY + 6;
+
+        // Render title without shadow for sharpness
+        context.drawText(
+                this.textRenderer,
+                title,
+                titleX,
+                titleY,
+                titleColor,
+                false
+        );
+
+        // Draw loading text precisely
         if (this.isLoading) {
-            context.drawCenteredTextWithShadow(
+            String loadingText = "Loading...";
+            int loadingWidth = this.textRenderer.getWidth(loadingText);
+            int loadingX = centerX - loadingWidth / 2;
+
+            context.drawText(
                     this.textRenderer,
-                    Text.literal("Loading..."),
-                    centerX,
+                    loadingText,
+                    loadingX,
                     centerY + 40,
-                    0xFFFFFF
+                    0xFFFFFF,
+                    false
             );
         }
 
         // Render player data if available
         if (this.playerData != null && !this.isLoading && this.currentUsername != null) {
             renderPlayerData(context, windowX, windowY);
-        } else if (!this.isLoading && this.currentUsername != null && this.playerData == null) {
-            // If search completed but no data found
-            context.drawCenteredTextWithShadow(
+        } else if (!this.isLoading && this.currentUsername != null) {
+            // Player not found text
+            String notFoundText = "Player not found: " + this.currentUsername;
+            int notFoundWidth = this.textRenderer.getWidth(notFoundText);
+            int notFoundX = centerX - notFoundWidth / 2;
+
+            context.drawText(
                     this.textRenderer,
-                    Text.literal("Player not found: " + this.currentUsername),
-                    centerX,
+                    notFoundText,
+                    notFoundX,
                     centerY + 40,
-                    0xFF5555
+                    0xFF5555,
+                    false
             );
         }
 
-        // Call parent render which will render all children (buttons, etc.)
+        // Render all child widgets
         super.render(context, mouseX, mouseY, delta);
 
-        // Render the leaderboard widget after all other elements
+        // Render leaderboard widget
         if (this.leaderboardWidget != null && this.leaderboardWidget.isVisible()) {
             this.leaderboardWidget.render(context, mouseX, mouseY, delta);
         }
-    }
-
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // Check if the leaderboard handles this click
-        if (this.leaderboardWidget != null && this.leaderboardWidget.isVisible() &&
-                this.leaderboardWidget.mouseClicked(mouseX, mouseY, button)) {
-            return true;
-        }
-
-        // Otherwise, pass to default handling
-        return super.mouseClicked(mouseX, mouseY, button);
-    }
-
-    @Override
-    public void removed() {
-        super.removed();
-
-        // Save leaderboard visibility state to config
-        ModConfig config = ModConfig.getInstance();
-        config.setShowLeaderboard(this.leaderboardWidget != null && this.leaderboardWidget.isVisible());
-        config.save();
-    }
-
-    @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
-        return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
     }
 
     private void renderPlayerData(DrawContext context, int windowX, int windowY) {
@@ -311,16 +306,21 @@ public class TierScreen extends Screen {
                 int tierTextColor = config.getColor("tier_text", 0x4080FF);
                 int pointsTextColor = config.getColor("points_text", 0xFFAA00);
 
-                // Draw player name and UUID
-                context.drawTextWithShadow(
+                // Calculate precise positions
+                int startX = windowX + 20;
+                int startY = windowY + 80;
+
+                // Render player name precisely
+                context.drawText(
                         this.textRenderer,
-                        Text.literal("Player: " + this.currentUsername),
-                        windowX + 20,
-                        windowY + 80,
-                        textPrimaryColor
+                        "Player: " + this.currentUsername,
+                        startX,
+                        startY,
+                        textPrimaryColor,
+                        false
                 );
 
-                // Draw selected game mode stats
+                // Get selected game mode stats
                 JsonArray modeStats = gameStats.has(this.selectedTab) ?
                         gameStats.getAsJsonArray(this.selectedTab) : null;
 
@@ -332,72 +332,105 @@ public class TierScreen extends Screen {
                     int points = apiService.getPointsForTier(tier);
                     String formattedTime = apiService.formatUnixTimestamp(lastUpdate);
 
-                    // Draw the tier information
-                    context.drawTextWithShadow(
+                    // Render tier with precise positioning
+                    context.drawText(
                             this.textRenderer,
-                            Text.literal("Tier: " + tier),
-                            windowX + 20,
-                            windowY + 100,
-                            tierTextColor
+                            "Tier: " + tier,
+                            startX,
+                            startY + 20,
+                            tierTextColor,
+                            false
                     );
 
-                    context.drawTextWithShadow(
+                    // Render points with precise positioning
+                    context.drawText(
                             this.textRenderer,
-                            Text.literal("Points: " + points),
-                            windowX + 20,
-                            windowY + 115,
-                            pointsTextColor
+                            "Points: " + points,
+                            startX,
+                            startY + 40,
+                            pointsTextColor,
+                            false
                     );
 
-                    context.drawTextWithShadow(
+                    // Render last updated with precise positioning
+                    context.drawText(
                             this.textRenderer,
-                            Text.literal("Last updated: " + formattedTime),
-                            windowX + 20,
-                            windowY + 130,
-                            textSecondaryColor
+                            "Last updated: " + formattedTime,
+                            startX,
+                            startY + 60,
+                            textSecondaryColor,
+                            false
                     );
 
-                    // Get rank from leaderboard if available
+                    // Render rank if leaderboard is available
                     if (this.leaderboardWidget != null) {
                         int rank = this.leaderboardWidget.getPlayerRank(this.currentUsername);
                         if (rank > 0) {
-                            context.drawTextWithShadow(
+                            context.drawText(
                                     this.textRenderer,
-                                    Text.literal("Rank: #" + rank + " in " + this.selectedTab),
-                                    windowX + 20,
-                                    windowY + 145,
-                                    pointsTextColor
+                                    "Rank: #" + rank + " in " + this.selectedTab,
+                                    startX,
+                                    startY + 80,
+                                    pointsTextColor,
+                                    false
                             );
                         }
                     }
                 } else {
-                    context.drawTextWithShadow(
+                    // No data for this game mode
+                    context.drawText(
                             this.textRenderer,
-                            Text.literal("No data for " + TAB_LABELS[getTabIndex(this.selectedTab)]),
-                            windowX + 20,
-                            windowY + 100,
-                            config.getColor("text_error", 0xFF5555)
+                            "No data for " + TAB_LABELS[getTabIndex(this.selectedTab)],
+                            startX,
+                            startY + 20,
+                            config.getColor("text_error", 0xFF5555),
+                            false
                     );
                 }
             } else {
-                context.drawTextWithShadow(
+                // No tier data at all
+                context.drawText(
                         this.textRenderer,
-                        Text.literal("No tier data available for this player"),
+                        "No tier data available",
                         windowX + 20,
                         windowY + 100,
-                        ModConfig.getInstance().getColor("text_error", 0xFF5555)
+                        ModConfig.getInstance().getColor("text_error", 0xFF5555),
+                        false
                 );
             }
         } catch (Exception e) {
-            context.drawTextWithShadow(
+            // Error displaying data
+            context.drawText(
                     this.textRenderer,
-                    Text.literal("Error displaying player data: " + e.getMessage()),
+                    "Error displaying player data: " + e.getMessage(),
                     windowX + 20,
                     windowY + 100,
-                    ModConfig.getInstance().getColor("text_error", 0xFF5555)
+                    ModConfig.getInstance().getColor("text_error", 0xFF5555),
+                    false
             );
             LOGGER.error("Error rendering player data", e);
         }
+    }
+
+    /**
+     * Get color for a tier
+     */
+    private int getTierColor(String tier) {
+        if (tier == null) return 0xFF4080FF; // Default
+
+        if (tier.equals("LT69")) return 0xFFAA00FF; // Special color for LT69
+        if (tier.startsWith("HT1")) return 0xFFFF55FF;
+        if (tier.startsWith("LT1")) return 0xFFFF5555;
+        if (tier.startsWith("HT2")) return 0xFFFF8800;
+        if (tier.startsWith("LT2")) return 0xFFFFAA00;
+        if (tier.startsWith("HT3")) return 0xFF55FF55;
+        if (tier.startsWith("LT3")) return 0xFF55FFFF;
+        if (tier.startsWith("HT4")) return 0xFF5555FF;
+        if (tier.startsWith("LT4")) return 0xFF9955FF;
+        if (tier.startsWith("HT5")) return 0xFF555555;
+        if (tier.startsWith("LT5")) return 0xFFAAAAAA;
+
+        return 0xFF4080FF; // Default
     }
 
     private int getTabIndex(String gameMode) {
@@ -418,7 +451,7 @@ public class TierScreen extends Screen {
         historyTracker = tracker;
     }
 
-    // Custom tab button class
+    // Custom tab button class with precise rendering
     private static class TabButton extends ButtonWidget {
         private final String gameMode;
         private boolean selected;
@@ -439,26 +472,34 @@ public class TierScreen extends Screen {
 
         @Override
         public void renderWidget(DrawContext context, int mouseX, int mouseY, float delta) {
-            // Apply theme colors from config
+            // Get theme colors precisely
             ModConfig config = ModConfig.getInstance();
             int activeTabColor = config.getColor("tab_active", 0xFF4080FF);
             int inactiveTabColor = config.getColor("tab_inactive", 0xFF303030);
 
-            // Custom rendering for tab buttons
+            // Precise tab button rendering
             if (this.selected) {
-                // Selected tab styling
+                // Selected tab with full opacity
                 context.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), activeTabColor);
             } else {
-                // Normal tab styling
+                // Inactive tab with full opacity
                 context.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), inactiveTabColor);
             }
 
-            context.drawCenteredTextWithShadow(
+            // Precise text rendering
+            String buttonText = this.getMessage().getString();
+            int textWidth = MinecraftClient.getInstance().textRenderer.getWidth(buttonText);
+            int textX = this.getX() + (this.getWidth() - textWidth) / 2;
+            int textY = this.getY() + (this.getHeight() - 8) / 2;
+
+            // Render text without shadow for maximum sharpness
+            context.drawText(
                     MinecraftClient.getInstance().textRenderer,
-                    this.getMessage(),
-                    this.getX() + this.getWidth() / 2,
-                    this.getY() + (this.getHeight() - 8) / 2,
-                    this.selected ? 0xFFFFFF : 0xE0E0E0
+                    buttonText,
+                    textX,
+                    textY,
+                    this.selected ? 0xFFFFFF : 0xE0E0E0,
+                    false
             );
         }
     }

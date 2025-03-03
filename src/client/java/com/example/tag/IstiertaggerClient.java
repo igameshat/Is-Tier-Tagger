@@ -31,7 +31,7 @@ public class IstiertaggerClient implements ClientModInitializer {
 	private static Object jda = null; // Changed from JDA to Object to avoid direct class reference
 	private static boolean discordAvailable = false;
 
-	private static final String DISCORD_TOKEN = null;
+	private static final String DISCORD_TOKEN = "HIDDEN";
 
 
 	private IsrealTiersApiService apiService;

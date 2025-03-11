@@ -1,6 +1,11 @@
 package com.example.tag;
 
+import com.example.tag.fix.DirectTextRenderer;
+import com.example.tag.fix.DirectTextRenderer;
+
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.Drawable;
+import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.Text;
@@ -13,19 +18,16 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Screen for managing themes
+ * Screen for managing themes - fixed to have no blurry text and correct border calls
  */
 public class ThemeSettingsScreen extends Screen {
     private static final Logger LOGGER = LoggerFactory.getLogger("ThemeSettingsScreen");
     private static final int WINDOW_WIDTH = 400;
-    private static final int WINDOW_HEIGHT = 300;
+    private static final int WINDOW_HEIGHT = 330; // Increased height for better spacing
 
     private final Screen parent;
     private final ThemeManager themeManager;
 
-    // UI components
-    private ButtonWidget backButton;
-    private ButtonWidget createThemeButton;
     private ButtonWidget editThemeButton;
     private ButtonWidget deleteThemeButton;
 
@@ -44,6 +46,7 @@ public class ThemeSettingsScreen extends Screen {
     protected void init() {
         super.init();
 
+        // Calculate exact integer positions for sharpness
         int centerX = this.width / 2;
         int centerY = this.height / 2;
         int windowX = centerX - WINDOW_WIDTH / 2;
@@ -53,18 +56,18 @@ public class ThemeSettingsScreen extends Screen {
         loadThemeEntries();
 
         // Back button
-        this.backButton = ButtonWidget.builder(
+        ButtonWidget backButton = ButtonWidget.builder(
                 Text.literal("Back"),
                 button -> close()
         ).dimensions(windowX + 20, windowY + WINDOW_HEIGHT - 30, 80, 20).build();
-        this.addDrawableChild(this.backButton);
+        this.addDrawableChild(backButton);
 
         // Create new theme button
-        this.createThemeButton = ButtonWidget.builder(
+        ButtonWidget createThemeButton = ButtonWidget.builder(
                 Text.literal("Create New"),
                 button -> createNewTheme()
         ).dimensions(windowX + 120, windowY + WINDOW_HEIGHT - 30, 80, 20).build();
-        this.addDrawableChild(this.createThemeButton);
+        this.addDrawableChild(createThemeButton);
 
         // Edit button
         this.editThemeButton = ButtonWidget.builder(
@@ -127,8 +130,8 @@ public class ThemeSettingsScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        // Draw a darkened solid background
-        context.fill(0, 0, this.width, this.height, 0xCC000000);
+        // Draw a darkened solid background with pixel-perfect rendering
+        DirectTextRenderer.drawRect(context, 0, 0, this.width, this.height, 0xCC000000);
 
         // Get theme colors
         ModConfig config = ModConfig.getInstance();
@@ -139,38 +142,47 @@ public class ThemeSettingsScreen extends Screen {
         int textSecondaryColor = config.getColor("text_secondary", 0xAAAAAA);
         int activeColor = config.getColor("tab_active", 0x4080FF);
 
+        // Calculate exact pixel positions
         int centerX = this.width / 2;
         int centerY = this.height / 2;
         int windowX = centerX - WINDOW_WIDTH / 2;
         int windowY = centerY - WINDOW_HEIGHT / 2;
 
-        // Draw window background
-        context.fill(windowX, windowY, windowX + WINDOW_WIDTH, windowY + WINDOW_HEIGHT, backgroundColor);
-        context.drawBorder(windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, borderColor);
+        // Draw window background with pixel-perfect rendering
+        DirectTextRenderer.drawRect(context, windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, backgroundColor);
 
-        // Draw title
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, centerX, windowY + 10, titleColor);
+        // Draw border with pixel-perfect edges
+        DirectTextRenderer.drawBorder(context, windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, borderColor);
 
-        // Draw theme list
-        context.drawTextWithShadow(
-                this.textRenderer,
-                Text.literal("Available Themes:"),
+        // Draw title with sharp text
+        DirectTextRenderer.drawCenteredText(
+                context,
+                this.title.getString(),
+                centerX,
+                windowY + 10,
+                titleColor
+        );
+
+        // Draw theme list header with sharp text
+        DirectTextRenderer.drawText(
+                context,
+                "Available Themes:",
                 windowX + 20,
                 windowY + 30,
                 textPrimaryColor
         );
 
-        // Draw list area background and border
+        // Draw list area background and border with pixel-perfect rendering
         int listX = windowX + 20;
         int listY = windowY + 45;
         int listWidth = WINDOW_WIDTH - 40;
-        int listHeight = WINDOW_HEIGHT - 90;
+        int listHeight = WINDOW_HEIGHT - 100;
 
-        context.fill(listX, listY, listX + listWidth, listY + listHeight, 0x80000000);
-        context.drawBorder(listX, listY, listWidth, listHeight, 0xFFAAAAAA);
+        DirectTextRenderer.drawRect(context, listX, listY, listWidth, listHeight, 0x80000000);
+        DirectTextRenderer.drawBorder(context, listX, listY, listWidth, listHeight, 0xFFAAAAAA);
 
-        // Draw theme entries
-        int entryHeight = 25;
+        // Draw theme entries with increased spacing for better readability
+        int entryHeight = 30;
         int maxVisibleEntries = listHeight / entryHeight;
 
         for (int i = 0; i < maxVisibleEntries && i + scrollOffset < themeEntries.size(); i++) {
@@ -179,50 +191,69 @@ public class ThemeSettingsScreen extends Screen {
 
             int entryY = listY + (i * entryHeight);
 
-            // Highlight selected entry
+            // Highlight selected entry with pixel-perfect rendering
             if (index == selectedThemeIndex) {
-                context.fill(listX + 1, entryY, listX + listWidth - 1, entryY + entryHeight, activeColor);
+                DirectTextRenderer.drawRect(context, listX + 1, entryY, listWidth - 2, entryHeight, activeColor);
             }
 
-            // Draw theme name
-            context.drawTextWithShadow(
-                    this.textRenderer,
-                    Text.literal(entry.getName()),
+            // Draw theme name with sharp text
+            DirectTextRenderer.drawText(
+                    context,
+                    entry.getName(),
                     listX + 10,
-                    entryY + 8,
+                    entryY + 10,
                     index == selectedThemeIndex ? 0xFFFFFF : textSecondaryColor
             );
 
             // Draw active indicator if this is the current theme
             if (entry.getName().equals(themeManager.getCurrentTheme().getName())) {
-                context.drawTextWithShadow(
-                        this.textRenderer,
-                        Text.literal("✓ Active"),
+                DirectTextRenderer.drawText(
+                        context,
+                        "✓ Active",
                         listX + listWidth - 70,
-                        entryY + 8,
+                        entryY + 10,
                         0x80FF80
                 );
             }
         }
 
-        // Draw help text
+        // Draw help text with sharp rendering
         if (selectedThemeIndex >= 0 && selectedThemeIndex < themeEntries.size()) {
             ThemeEntry selected = themeEntries.get(selectedThemeIndex);
             String activeMessage = selected.getName().equals(themeManager.getCurrentTheme().getName())
                     ? "Current active theme"
                     : "Click again to activate theme";
 
-            context.drawTextWithShadow(
-                    this.textRenderer,
-                    Text.literal(activeMessage),
+            DirectTextRenderer.drawText(
+                    context,
+                    activeMessage,
                     windowX + 20,
                     windowY + WINDOW_HEIGHT - 55,
                     activeColor
             );
         }
 
-        // Render buttons last to ensure they're on top
-        super.render(context, mouseX, mouseY, delta);
+        // Render all widgets first
+        for (Element element : this.children()) {
+            if (element instanceof Drawable drawable) {
+                drawable.render(context, mouseX, mouseY, delta);
+            }
+        }
+
+        // Re-render button text for sharpness
+        for (Element element : this.children()) {
+            if (element instanceof ButtonWidget button) {
+                int buttonCenterX = button.getX() + button.getWidth() / 2;
+                int buttonTextY = button.getY() + (button.getHeight() - 8) / 2;
+                DirectTextRenderer.drawCenteredText(
+                        context,
+                        button.getMessage().getString(),
+                        buttonCenterX,
+                        buttonTextY,
+                        button.active ? 0xFFFFFF : 0xAAAAAA
+                );
+            }
+        }
     }
 
     @Override
@@ -242,13 +273,13 @@ public class ThemeSettingsScreen extends Screen {
         int listX = windowX + 20;
         int listY = windowY + 45;
         int listWidth = WINDOW_WIDTH - 40;
-        int listHeight = WINDOW_HEIGHT - 90;
+        int listHeight = WINDOW_HEIGHT - 100;
 
         if (mouseX >= listX && mouseX < listX + listWidth &&
                 mouseY >= listY && mouseY < listY + listHeight) {
 
             // Calculate which theme was clicked
-            int entryHeight = 25;
+            int entryHeight = 30; // Match the increased height
             int clickedIndex = scrollOffset + (int)((mouseY - listY) / entryHeight);
 
             if (clickedIndex >= 0 && clickedIndex < themeEntries.size()) {
@@ -274,7 +305,7 @@ public class ThemeSettingsScreen extends Screen {
             if (verticalAmount > 0 && scrollOffset > 0) {
                 scrollOffset--;
                 return true;
-            } else if (verticalAmount < 0 && scrollOffset < themeEntries.size() - (WINDOW_HEIGHT - 90) / 25) {
+            } else if (verticalAmount < 0 && scrollOffset < themeEntries.size() - (WINDOW_HEIGHT - 100) / 30) {
                 scrollOffset++;
                 return true;
             }
@@ -302,6 +333,7 @@ public class ThemeSettingsScreen extends Screen {
      * Create a new theme
      */
     private void createNewTheme() {
+        assert this.client != null;
         this.client.setScreen(new ThemeEditorScreen(this, "", new HashMap<>(), true));
     }
 
@@ -311,6 +343,7 @@ public class ThemeSettingsScreen extends Screen {
     private void editSelectedTheme() {
         if (selectedThemeIndex >= 0 && selectedThemeIndex < themeEntries.size()) {
             ThemeEntry selected = themeEntries.get(selectedThemeIndex);
+            assert this.client != null;
             this.client.setScreen(new ThemeEditorScreen(this, selected.getName(), selected.getColors(), false));
         }
     }
@@ -334,6 +367,7 @@ public class ThemeSettingsScreen extends Screen {
 
     @Override
     public void close() {
+        assert this.client != null;
         this.client.setScreen(parent);
     }
 

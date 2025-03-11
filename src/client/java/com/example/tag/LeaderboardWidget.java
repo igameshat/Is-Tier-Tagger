@@ -1,6 +1,6 @@
 package com.example.tag;
 
-import com.example.tag.util.TextRenderHelper;
+import com.example.tag.fix.DirectTextRenderer;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.client.MinecraftClient;
@@ -17,6 +17,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * A widget to display the leaderboard for a specific game mode
+ * Implemented with pixel-perfect rendering for maximum sharpness
  */
 public class LeaderboardWidget {
     private static final Logger LOGGER = LoggerFactory.getLogger("LeaderboardWidget");
@@ -147,108 +148,94 @@ public class LeaderboardWidget {
         int tierTextColor = config.getColor("tier_text", 0x4080FF);
         int pointsTextColor = config.getColor("points_text", 0xFFAA00);
 
-        // Draw background
-        context.fill(x, y, x + WIDTH, y + HEIGHT, backgroundColor);
+        // Draw background with pixel-perfect edges
+        DirectTextRenderer.drawRect(context, x, y, WIDTH, HEIGHT, backgroundColor);
 
-        // Draw border manually for compatibility
-        drawBorder(context, x, y, WIDTH, HEIGHT, borderColor);
+        // Draw border with pixel-perfect edges
+        DirectTextRenderer.drawBorder(context, x, y, WIDTH, HEIGHT, borderColor);
 
-        // Draw title
+        // Draw title with sharp text
         String title = gameMode.substring(0, 1).toUpperCase() + gameMode.substring(1) + " Leaderboard";
-        TextRenderHelper.drawCenteredText(
+        DirectTextRenderer.drawCenteredText(
                 context,
-                MinecraftClient.getInstance().textRenderer,
                 title,
                 x + WIDTH / 2,
                 y + 10,
                 textColor
         );
 
-        // Render buttons
+        // Position refresh button (don't render it yet)
         refreshButton.setX(x + WIDTH - 40);
         refreshButton.setY(y + 5);
-        refreshButton.render(context, mouseX, mouseY, delta);
 
+        // Position close button (don't render it yet)
         closeButton.setX(x + WIDTH - 20);
         closeButton.setY(y + 5);
-        closeButton.render(context, mouseX, mouseY, delta);
 
-        // Draw loading indicator or entries
+        // Draw loading indicator or entries with sharp text
         if (isLoading) {
-            TextRenderHelper.drawCenteredText(
+            DirectTextRenderer.drawCenteredText(
                     context,
-                    MinecraftClient.getInstance().textRenderer,
                     "Loading...",
                     x + WIDTH / 2,
                     y + 80,
                     secondaryTextColor
             );
         } else if (entries.isEmpty()) {
-            TextRenderHelper.drawCenteredText(
+            DirectTextRenderer.drawCenteredText(
                     context,
-                    MinecraftClient.getInstance().textRenderer,
                     "No data available",
                     x + WIDTH / 2,
                     y + 80,
                     secondaryTextColor
             );
         } else {
-            // Draw column headers
-            TextRenderHelper.drawText(
+            // Draw column headers with sharp text
+            DirectTextRenderer.drawText(
                     context,
-                    MinecraftClient.getInstance().textRenderer,
                     "#",
                     x + 10,
                     y + 30,
-                    secondaryTextColor,
-                    true
+                    secondaryTextColor
             );
 
-            TextRenderHelper.drawText(
+            DirectTextRenderer.drawText(
                     context,
-                    MinecraftClient.getInstance().textRenderer,
                     "Player",
                     x + 30,
                     y + 30,
-                    secondaryTextColor,
-                    true
+                    secondaryTextColor
             );
 
-            TextRenderHelper.drawText(
+            DirectTextRenderer.drawText(
                     context,
-                    MinecraftClient.getInstance().textRenderer,
                     "Tier",
                     x + 120,
                     y + 30,
-                    secondaryTextColor,
-                    true
+                    secondaryTextColor
             );
 
-            TextRenderHelper.drawText(
+            DirectTextRenderer.drawText(
                     context,
-                    MinecraftClient.getInstance().textRenderer,
                     "Points",
                     x + 160,
                     y + 30,
-                    secondaryTextColor,
-                    true
+                    secondaryTextColor
             );
 
-            // Draw entries
+            // Draw entries with sharp text - using exact pixel coordinates
             int startY = y + 45;
             for (int i = 0; i < Math.min(entries.size(), MAX_ENTRIES); i++) {
                 LeaderboardEntry entry = entries.get(i);
                 int entryY = startY + (i * ENTRY_HEIGHT);
 
                 // Draw rank
-                TextRenderHelper.drawText(
+                DirectTextRenderer.drawText(
                         context,
-                        MinecraftClient.getInstance().textRenderer,
                         "#" + (i + 1),
                         x + 10,
                         entryY,
-                        textColor,
-                        true
+                        textColor
                 );
 
                 // Draw player name (truncated if needed)
@@ -257,59 +244,54 @@ public class LeaderboardWidget {
                     name = name.substring(0, 10) + "..";
                 }
 
-                TextRenderHelper.drawText(
+                DirectTextRenderer.drawText(
                         context,
-                        MinecraftClient.getInstance().textRenderer,
                         name,
                         x + 30,
                         entryY,
-                        textColor,
-                        true
+                        textColor
                 );
 
                 // Draw tier
-                TextRenderHelper.drawText(
+                DirectTextRenderer.drawText(
                         context,
-                        MinecraftClient.getInstance().textRenderer,
                         entry.getTier(),
                         x + 120,
                         entryY,
-                        tierTextColor,
-                        true
+                        tierTextColor
                 );
 
                 // Draw points
-                TextRenderHelper.drawText(
+                DirectTextRenderer.drawText(
                         context,
-                        MinecraftClient.getInstance().textRenderer,
                         String.valueOf(entry.getPoints()),
                         x + 160,
                         entryY,
-                        pointsTextColor,
-                        true
+                        pointsTextColor
                 );
             }
         }
-    }
 
-    /**
-     * Draw a border around a rectangle
-     */
-    private void drawBorder(DrawContext context, int x, int y, int width, int height, int color) {
-        try {
-            // Try the newer method first
-            context.drawBorder(x, y, width, height, color);
-        } catch (NoSuchMethodError e) {
-            // Fall back to manual border drawing
-            // Top
-            context.fill(x, y, x + width, y + 1, color);
-            // Bottom
-            context.fill(x, y + height - 1, x + width, y + height, color);
-            // Left
-            context.fill(x, y, x + 1, y + height, color);
-            // Right
-            context.fill(x + width - 1, y, x + width, y + height, color);
-        }
+        // Now render the buttons on top
+        refreshButton.render(context, mouseX, mouseY, delta);
+        closeButton.render(context, mouseX, mouseY, delta);
+
+        // Optional: Re-render button text for crispness
+        DirectTextRenderer.drawCenteredText(
+                context,
+                refreshButton.getMessage().getString(),
+                refreshButton.getX() + refreshButton.getWidth() / 2,
+                refreshButton.getY() + (refreshButton.getHeight() - 8) / 2,
+                0xFFFFFF
+        );
+
+        DirectTextRenderer.drawCenteredText(
+                context,
+                closeButton.getMessage().getString(),
+                closeButton.getX() + closeButton.getWidth() / 2,
+                closeButton.getY() + (closeButton.getHeight() - 8) / 2,
+                0xFFFFFF
+        );
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button) {

@@ -34,8 +34,8 @@ public class ThemeManager {
      * Represents a UI theme with a name and color scheme
      */
     public static class Theme {
-        private String name;
-        private Map<String, String> colors;
+        private final String name;
+        private final Map<String, String> colors;
 
         public Theme(String name, Map<String, String> colors) {
             this.name = name;

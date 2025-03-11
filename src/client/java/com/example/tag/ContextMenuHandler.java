@@ -28,7 +28,7 @@ public class ContextMenuHandler {
     private int menuX;
     private int menuY;
     private String targetUsername;
-    private List<MenuOption> menuOptions = new ArrayList<>();
+    private final List<MenuOption> menuOptions = new ArrayList<>();
 
     // Regular expression to extract username from chat
     private static final Pattern USERNAME_PATTERN = Pattern.compile("<([A-Za-z0-9_]{1,16})>");
@@ -72,9 +72,7 @@ public class ContextMenuHandler {
             lookupPlayer(username, "sword");
         }));
 
-        menuOptions.add(new MenuOption("View UHC Stats", (username) -> {
-            lookupPlayer(username, "uhc");
-        }));
+        menuOptions.add(new MenuOption("View UHC Stats", (username) -> lookupPlayer(username, "uhc")));
 
         menuOptions.add(new MenuOption("View Pot Stats", (username) -> {
             lookupPlayer(username, "pot");
@@ -84,9 +82,7 @@ public class ContextMenuHandler {
             lookupPlayer(username, "smp");
         }));
 
-        menuOptions.add(new MenuOption("Open in Browser", (username) -> {
-            openInBrowser(username);
-        }));
+        menuOptions.add(new MenuOption("Open in Browser", this::openInBrowser));
     }
 
     /**
@@ -267,6 +263,7 @@ public class ContextMenuHandler {
 
         // Execute the /istagger command
         MinecraftClient client = MinecraftClient.getInstance();
+        assert client.player != null;
         if (filter == null) {
             client.player.networkHandler.sendChatCommand("istagger " + username);
         } else {

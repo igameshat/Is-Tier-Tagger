@@ -1,7 +1,9 @@
 package com.example.tag;
 
-import com.example.tag.util.TextRenderHelper;
+import com.example.tag.fix.DirectTextRenderer;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.Drawable;
+import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
@@ -254,12 +256,7 @@ public class SettingsScreen extends Screen {
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         // Draw a darkened background
-        try {
-            renderBackground(context, mouseX, mouseY, delta);
-        } catch (NoSuchMethodError e) {
-            // Fallback for different API versions
-            context.fill(0, 0, this.width, this.height, 0x88000000);
-        }
+        DirectTextRenderer.drawRect(context, 0, 0, this.width, this.height, 0x88000000);
 
         int centerX = this.width / 2;
         int centerY = this.height / 2;
@@ -274,13 +271,12 @@ public class SettingsScreen extends Screen {
         int textPrimaryColor = config.getColor("text_primary", 0xFFFFFF);
 
         // Draw window background
-        context.fill(windowX, windowY, windowX + WINDOW_WIDTH, windowY + WINDOW_HEIGHT, backgroundColor);
-        drawBorder(context, windowX, windowY, borderColor);
+        DirectTextRenderer.drawRect(context, windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, backgroundColor);
+        DirectTextRenderer.drawBorder(context, windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, borderColor);
 
         // Draw title
-        TextRenderHelper.drawCenteredText(
+        DirectTextRenderer.drawCenteredText(
                 context,
-                this.textRenderer,
                 this.title.getString(),
                 centerX,
                 windowY + 10,
@@ -291,34 +287,34 @@ public class SettingsScreen extends Screen {
         int textFieldY = windowY + 35 + 25 * 4 + 10; // Match the position from init method
         int textFieldSpacing = 25;
 
-        // Draw text field labels
-        context.drawTextWithShadow(
-                this.textRenderer,
-                Text.literal("API Timeout (sec):"),
+        // Draw text field labels with sharp text
+        DirectTextRenderer.drawText(
+                context,
+                "API Timeout (sec):",
                 windowX + 20,
                 textFieldY + 6,
                 textPrimaryColor
         );
 
-        context.drawTextWithShadow(
-                this.textRenderer,
-                Text.literal("Cache Duration (min):"),
+        DirectTextRenderer.drawText(
+                context,
+                "Cache Duration (min):",
                 windowX + 20,
                 textFieldY + textFieldSpacing + 6,
                 textPrimaryColor
         );
 
-        context.drawTextWithShadow(
-                this.textRenderer,
-                Text.literal("Tier List Cache (min):"),
+        DirectTextRenderer.drawText(
+                context,
+                "Tier List Cache (min):",
                 windowX + 20,
                 textFieldY + textFieldSpacing * 2 + 6,
                 textPrimaryColor
         );
 
-        context.drawTextWithShadow(
-                this.textRenderer,
-                Text.literal("Leaderboard Entries:"),
+        DirectTextRenderer.drawText(
+                context,
+                "Leaderboard Entries:",
                 windowX + 20,
                 textFieldY + textFieldSpacing * 3 + 6,
                 textPrimaryColor
@@ -326,17 +322,41 @@ public class SettingsScreen extends Screen {
 
         // Add warning message if Discord is enabled but JDA is not available
         if (this.discordEnabled && isDiscordAvailable()) {
-            context.drawTextWithShadow(
-                    this.textRenderer,
-                    Text.literal("§cDiscord library not found! Discord will be disabled."),
+            DirectTextRenderer.drawText(
+                    context,
+                    "§cDiscord library not found! Discord will be disabled.",
                     windowX + 20,
                     windowY + WINDOW_HEIGHT - 50,
                     0xFF5555
             );
         }
 
-        // Render all widgets after drawing our custom content
-        super.render(context, mouseX, mouseY, delta);
+        // Render all widgets first
+        renderWidgets(context, mouseX, mouseY, delta);
+    }
+
+    private void renderWidgets(DrawContext context, int mouseX, int mouseY, float delta) {
+        // First render all drawable elements
+        for (Element element : this.children()) {
+            if (element instanceof Drawable drawable) {
+                drawable.render(context, mouseX, mouseY, delta);
+            }
+        }
+
+        // Re-render button text for sharpness
+        for (Element element : this.children()) {
+            if (element instanceof ButtonWidget button) {
+                int buttonCenterX = button.getX() + button.getWidth() / 2;
+                int buttonTextY = button.getY() + (button.getHeight() - 8) / 2;
+                DirectTextRenderer.drawCenteredText(
+                        context,
+                        button.getMessage().getString(),
+                        buttonCenterX,
+                        buttonTextY,
+                        button.active ? 0xFFFFFF : 0xAAAAAA
+                );
+            }
+        }
     }
 
     /**
@@ -392,9 +412,9 @@ public class SettingsScreen extends Screen {
     private boolean isDiscordAvailable() {
         try {
             Class.forName("net.dv8tion.jda.api.JDA");
-            return false;
+            return true;  // Discord IS available
         } catch (ClassNotFoundException e) {
-            return true;
+            return false;  // Discord is NOT available
         }
     }
 

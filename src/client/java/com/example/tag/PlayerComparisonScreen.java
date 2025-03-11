@@ -1,9 +1,12 @@
 package com.example.tag;
 
+import com.example.tag.fix.DirectTextRenderer;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.Drawable;
+import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
@@ -11,12 +14,11 @@ import net.minecraft.text.Text;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
  * Screen for comparing two players side-by-side
+ * Enhanced with pixel-perfect rendering for maximum clarity
  */
 public class PlayerComparisonScreen extends Screen {
     private static final Logger LOGGER = LoggerFactory.getLogger("PlayerComparisonScreen");
@@ -52,6 +54,7 @@ public class PlayerComparisonScreen extends Screen {
     protected void init() {
         super.init();
 
+        // Calculate exact pixel positions for sharp rendering
         int centerX = this.width / 2;
         int centerY = this.height / 2;
         int windowX = centerX - WINDOW_WIDTH / 2;
@@ -173,13 +176,10 @@ public class PlayerComparisonScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        // Render background
-        try {
-            context.fill(0, 0, this.width, this.height, 0x88000000); // Fallback background
-        } catch (Exception e) {
-            // Ignore any errors
-        }
+        // Render background with pixel-perfect fill
+        DirectTextRenderer.drawRect(context, 0, 0, this.width, this.height, 0x88000000);
 
+        // Calculate exact pixel positions
         int centerX = this.width / 2;
         int centerY = this.height / 2;
         int windowX = centerX - WINDOW_WIDTH / 2;
@@ -189,81 +189,81 @@ public class PlayerComparisonScreen extends Screen {
         ModConfig config = ModConfig.getInstance();
         int backgroundColor = config.getColor("background", 0xCC000000);
         int borderColor = config.getColor("border", 0xFFFFFFFF);
-        int titleColor = config.getColor("title", 0xFFFFFFFF);
+        int titleColor = config.getColor("title", 0xFFFFFF);
 
-        // Draw window background
-        context.fill(windowX, windowY, windowX + WINDOW_WIDTH, windowY + WINDOW_HEIGHT, backgroundColor);
-        context.drawBorder(windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, borderColor);
+        // Draw window background with pixel-perfect edges
+        DirectTextRenderer.drawRect(context, windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, backgroundColor);
+        DirectTextRenderer.drawBorder(context, windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, borderColor);
 
-        // Draw title
-        context.drawCenteredTextWithShadow(
-                this.textRenderer,
-                this.title,
+        // Draw title with sharp text
+        DirectTextRenderer.drawCenteredText(
+                context,
+                this.title.getString(),
                 centerX,
                 windowY + 10,
                 titleColor
         );
 
-        // Draw player labels
-        context.drawTextWithShadow(
-                this.textRenderer,
-                Text.literal("Player 1:"),
+        // Draw player labels with sharp text
+        DirectTextRenderer.drawText(
+                context,
+                "Player 1:",
                 windowX + 20,
                 windowY + 20,
                 config.getColor("text_primary", 0xFFFFFF)
         );
 
-        context.drawTextWithShadow(
-                this.textRenderer,
-                Text.literal("Player 2:"),
+        DirectTextRenderer.drawText(
+                context,
+                "Player 2:",
                 windowX + WINDOW_WIDTH - 200,
                 windowY + 20,
                 config.getColor("text_primary", 0xFFFFFF)
         );
 
-        // Draw loading indicator
+        // Draw loading indicator with sharp text
         if (isLoading) {
-            context.drawCenteredTextWithShadow(
-                    this.textRenderer,
-                    Text.literal("Loading..."),
+            DirectTextRenderer.drawCenteredText(
+                    context,
+                    "Loading...",
                     centerX,
                     centerY,
                     config.getColor("text_secondary", 0xAAAAAA)
             );
         } else if (player1Data != null || player2Data != null) {
-            // Draw comparison data
+            // Draw comparison data with sharp text
             renderComparisonData(context, windowX, windowY, config);
         }
 
-        // Call parent render which will render all children (buttons, etc.)
-        super.render(context, mouseX, mouseY, delta);
+        // Render all widgets with crisp text
+        renderWidgets(context, mouseX, mouseY, delta);
     }
 
     private void renderComparisonData(DrawContext context, int windowX, int windowY, ModConfig config) {
         // Get screen center for alignment
         int centerX = this.width / 2;
 
-        // Column headers with centered divider
+        // Column headers with centered divider - using exact pixel positions
         int dividerX = windowX + WINDOW_WIDTH / 2;
         int startY = windowY + 90;
         int rowHeight = 20;
 
-        // Draw headers
+        // Draw headers with sharp text
         String player1Name = player1Username;
         String player2Name = player2Username;
 
         if (player1Data != null) {
-            context.drawTextWithShadow(
-                    this.textRenderer,
-                    Text.literal(player1Name),
+            DirectTextRenderer.drawText(
+                    context,
+                    player1Name,
                     dividerX - 100,
                     startY - rowHeight,
                     config.getColor("text_primary", 0xFFFFFF)
             );
         } else {
-            context.drawTextWithShadow(
-                    this.textRenderer,
-                    Text.literal("Player not found: " + player1Name),
+            DirectTextRenderer.drawText(
+                    context,
+                    "Player not found: " + player1Name,
                     dividerX - 150,
                     startY - rowHeight,
                     config.getColor("text_error", 0xFF5555)
@@ -271,28 +271,27 @@ public class PlayerComparisonScreen extends Screen {
         }
 
         if (player2Data != null) {
-            context.drawTextWithShadow(
-                    this.textRenderer,
-                    Text.literal(player2Name),
+            DirectTextRenderer.drawText(
+                    context,
+                    player2Name,
                     dividerX + 50,
                     startY - rowHeight,
                     config.getColor("text_primary", 0xFFFFFF)
             );
         } else {
-            context.drawTextWithShadow(
-                    this.textRenderer,
-                    Text.literal("Player not found: " + player2Name),
+            DirectTextRenderer.drawText(
+                    context,
+                    "Player not found: " + player2Name,
                     dividerX + 10,
                     startY - rowHeight,
                     config.getColor("text_error", 0xFF5555)
             );
         }
 
-        // Draw divider line
-        context.fill(dividerX, windowY + 80, dividerX + 1, windowY + WINDOW_HEIGHT - 40,
-                config.getColor("border", 0xFFFFFFFF));
+        // Draw divider line with pixel-perfect edges
+        DirectTextRenderer.drawRect(context, dividerX, windowY + 80, 1, WINDOW_HEIGHT - 110, config.getColor("border", 0xFFFFFFFF));
 
-        // Draw game mode comparisons
+        // Draw game mode comparisons with sharp text
         int totalPlayer1Points = 0;
         int totalPlayer2Points = 0;
 
@@ -301,10 +300,10 @@ public class PlayerComparisonScreen extends Screen {
             String displayName = MODE_LABELS[i];
             int rowY = startY + (i * rowHeight);
 
-            // Draw game mode label
-            context.drawCenteredTextWithShadow(
-                    this.textRenderer,
-                    Text.literal(displayName),
+            // Draw game mode label with sharp text
+            DirectTextRenderer.drawCenteredText(
+                    context,
+                    displayName,
                     dividerX,
                     rowY,
                     config.getColor("text_secondary", 0xAAAAAA)
@@ -333,18 +332,18 @@ public class PlayerComparisonScreen extends Screen {
                     LOGGER.error("Error parsing player 1 data for " + gameMode, e);
                 }
 
-                // Display tier and points
-                context.drawTextWithShadow(
-                        this.textRenderer,
-                        Text.literal(tier1),
+                // Display tier and points with sharp text
+                DirectTextRenderer.drawText(
+                        context,
+                        tier1,
                         dividerX - 100,
                         rowY,
                         config.getColor("tier_text", 0x4080FF)
                 );
 
-                context.drawTextWithShadow(
-                        this.textRenderer,
-                        Text.literal("(" + points1 + " pts)"),
+                DirectTextRenderer.drawText(
+                        context,
+                        "(" + points1 + " pts)",
                         dividerX - 70,
                         rowY,
                         config.getColor("points_text", 0xFFAA00)
@@ -374,18 +373,18 @@ public class PlayerComparisonScreen extends Screen {
                     LOGGER.error("Error parsing player 2 data for " + gameMode, e);
                 }
 
-                // Display tier and points
-                context.drawTextWithShadow(
-                        this.textRenderer,
-                        Text.literal(tier2),
+                // Display tier and points with sharp text
+                DirectTextRenderer.drawText(
+                        context,
+                        tier2,
                         dividerX + 50,
                         rowY,
                         config.getColor("tier_text", 0x4080FF)
                 );
 
-                context.drawTextWithShadow(
-                        this.textRenderer,
-                        Text.literal("(" + points2 + " pts)"),
+                DirectTextRenderer.drawText(
+                        context,
+                        "(" + points2 + " pts)",
                         dividerX + 80,
                         rowY,
                         config.getColor("points_text", 0xFFAA00)
@@ -393,13 +392,13 @@ public class PlayerComparisonScreen extends Screen {
             }
         }
 
-        // Draw total points
+        // Draw total points with sharp text
         int summaryY = startY + (GAME_MODES.length * rowHeight) + 10;
 
         if (player1Data != null) {
-            context.drawTextWithShadow(
-                    this.textRenderer,
-                    Text.literal("Total Points: " + totalPlayer1Points),
+            DirectTextRenderer.drawText(
+                    context,
+                    "Total Points: " + totalPlayer1Points,
                     dividerX - 120,
                     summaryY,
                     0xFFFFFF
@@ -407,16 +406,16 @@ public class PlayerComparisonScreen extends Screen {
         }
 
         if (player2Data != null) {
-            context.drawTextWithShadow(
-                    this.textRenderer,
-                    Text.literal("Total Points: " + totalPlayer2Points),
+            DirectTextRenderer.drawText(
+                    context,
+                    "Total Points: " + totalPlayer2Points,
                     dividerX + 30,
                     summaryY,
                     0xFFFFFF
             );
         }
 
-        // Draw point difference if both players have data
+        // Draw point difference if both players have data with sharp text
         if (player1Data != null && player2Data != null) {
             int pointDiff = totalPlayer1Points - totalPlayer2Points;
             String compareText;
@@ -433,13 +432,37 @@ public class PlayerComparisonScreen extends Screen {
                 compareColor = 0xFFFFFF; // White
             }
 
-            context.drawCenteredTextWithShadow(
-                    this.textRenderer,
-                    Text.literal(compareText),
+            DirectTextRenderer.drawCenteredText(
+                    context,
+                    compareText,
                     centerX,
                     summaryY + 20,
                     compareColor
             );
+        }
+    }
+
+    private void renderWidgets(DrawContext context, int mouseX, int mouseY, float delta) {
+        // First render all drawable elements
+        for (Element element : this.children()) {
+            if (element instanceof Drawable drawable) {
+                drawable.render(context, mouseX, mouseY, delta);
+            }
+        }
+
+        // Re-render button text for sharpness
+        for (Element element : this.children()) {
+            if (element instanceof ButtonWidget button) {
+                int buttonCenterX = button.getX() + button.getWidth() / 2;
+                int buttonTextY = button.getY() + (button.getHeight() - 8) / 2;
+                DirectTextRenderer.drawCenteredText(
+                        context,
+                        button.getMessage().getString(),
+                        buttonCenterX,
+                        buttonTextY,
+                        button.active ? 0xFFFFFF : 0xAAAAAA
+                );
+            }
         }
     }
 

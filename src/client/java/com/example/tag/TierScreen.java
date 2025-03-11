@@ -1,9 +1,13 @@
 package com.example.tag;
 
+import com.example.tag.fix.DirectTextRenderer;
+import com.example.tag.fix.SharpTabButton;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.Drawable;
+import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
@@ -15,6 +19,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Main screen for Israel Tier Tagger mod with zero blurriness
+ */
 public class TierScreen extends Screen {
     private static final Logger LOGGER = LoggerFactory.getLogger("TierScreen");
 
@@ -28,7 +35,7 @@ public class TierScreen extends Screen {
     // Components
     private TextFieldWidget searchField;
     private ButtonWidget searchButton;
-    private List<TabButton> gameTabs = new ArrayList<>();
+    private List<SharpTabButton> gameTabs = new ArrayList<>();
     private String selectedTab = "crystal";
 
     private ButtonWidget viewHistoryButton;
@@ -57,6 +64,7 @@ public class TierScreen extends Screen {
     protected void init() {
         super.init();
 
+        // Calculate exact pixel positions
         int centerX = this.width / 2;
         int centerY = this.height / 2;
         int windowX = centerX - WINDOW_WIDTH / 2;
@@ -73,6 +81,7 @@ public class TierScreen extends Screen {
         this.customizeThemeButton = ButtonWidget.builder(
                 Text.literal("Customize Theme"),
                 (button) -> {
+                    assert this.client != null;
                     this.client.setScreen(new ThemeSettingsScreen(this));
                 }
         ).dimensions(windowX + 200, windowY + WINDOW_HEIGHT - 30, 100, 20).build();
@@ -101,15 +110,16 @@ public class TierScreen extends Screen {
         ButtonWidget settingsButton = ButtonWidget.builder(
                 Text.literal("Settings"),
                 (button) -> {
+                    assert this.client != null;
                     this.client.setScreen(new SettingsScreen(this));
                 }
         ).dimensions(windowX + 20, windowY + WINDOW_HEIGHT - 30, 80, 20).build();
         this.addDrawableChild(settingsButton);
 
-        // Game mode tabs
+        // Game mode tabs - USING OUR SHARP TAB BUTTON
         for (int i = 0; i < GAME_MODES.length; i++) {
             final int index = i;
-            TabButton tabButton = new TabButton(
+            SharpTabButton tabButton = new SharpTabButton(
                     windowX + 20 + (i * 60),
                     windowY + 50,
                     55,
@@ -135,6 +145,7 @@ public class TierScreen extends Screen {
                     button -> {
                         if (this.currentUsername != null && this.playerData != null) {
                             String uuid = this.playerData.get("id").getAsString();
+                            assert this.client != null;
                             this.client.setScreen(new PlayerHistoryScreen(this, uuid, this.currentUsername, historyTracker));
                         }
                     }
@@ -149,7 +160,7 @@ public class TierScreen extends Screen {
     }
 
     private void updateTabSelection() {
-        for (TabButton button : gameTabs) {
+        for (SharpTabButton button : gameTabs) {
             button.setSelected(button.getGameMode().equals(selectedTab));
         }
     }
@@ -208,9 +219,10 @@ public class TierScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        // Render background with minimum processing
+        // Render background with clean fill
         context.fill(0, 0, this.width, this.height, 0x88000000);
 
+        // Calculate exact pixel positions
         int centerX = this.width / 2;
         int centerY = this.height / 2;
         int windowX = centerX - WINDOW_WIDTH / 2;
@@ -221,45 +233,32 @@ public class TierScreen extends Screen {
         int backgroundColor = config.getColor("background", 0xCC000000);
         int borderColor = config.getColor("border", 0xFFFFFFFF);
         int titleColor = config.getColor("title", 0xFFFFFF);
+        int textPrimaryColor = config.getColor("text_primary", 0xFFFFFF);
+        int textSecondaryColor = config.getColor("text_secondary", 0xAAAAAA);
 
-        // Draw window background with precise filling
-        context.fill(windowX, windowY, windowX + WINDOW_WIDTH, windowY + WINDOW_HEIGHT, backgroundColor);
+        // Draw window background
+        DirectTextRenderer.drawRect(context, windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, backgroundColor);
 
-        // Draw border manually for sharpness
-        context.fill(windowX, windowY, windowX + WINDOW_WIDTH, windowY + 1, borderColor);
-        context.fill(windowX, windowY + WINDOW_HEIGHT - 1, windowX + WINDOW_WIDTH, windowY + WINDOW_HEIGHT, borderColor);
-        context.fill(windowX, windowY, windowX + 1, windowY + WINDOW_HEIGHT, borderColor);
-        context.fill(windowX + WINDOW_WIDTH - 1, windowY, windowX + WINDOW_WIDTH, windowY + WINDOW_HEIGHT, borderColor);
+        // Draw border with pixel-perfect edges
+        DirectTextRenderer.drawBorder(context, windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, borderColor);
 
-        // Draw title with precise rendering
-        String title = this.title.getString();
-        int titleWidth = this.textRenderer.getWidth(title);
-        int titleX = centerX - titleWidth / 2;
-        int titleY = windowY + 6;
-
-        // Render title without shadow for sharpness
-        context.drawText(
-                this.textRenderer,
-                title,
-                titleX,
-                titleY,
-                titleColor,
-                false
+        // Draw title with DIRECT crisp text rendering
+        DirectTextRenderer.drawCenteredText(
+                context,
+                this.title.getString(),
+                centerX,
+                windowY + 6,
+                titleColor
         );
 
-        // Draw loading text precisely
+        // Draw loading text with DIRECT crisp text rendering
         if (this.isLoading) {
-            String loadingText = "Loading...";
-            int loadingWidth = this.textRenderer.getWidth(loadingText);
-            int loadingX = centerX - loadingWidth / 2;
-
-            context.drawText(
-                    this.textRenderer,
-                    loadingText,
-                    loadingX,
+            DirectTextRenderer.drawCenteredText(
+                    context,
+                    "Loading...",
+                    centerX,
                     centerY + 40,
-                    0xFFFFFF,
-                    false
+                    textPrimaryColor
             );
         }
 
@@ -267,27 +266,51 @@ public class TierScreen extends Screen {
         if (this.playerData != null && !this.isLoading && this.currentUsername != null) {
             renderPlayerData(context, windowX, windowY);
         } else if (!this.isLoading && this.currentUsername != null) {
-            // Player not found text
-            String notFoundText = "Player not found: " + this.currentUsername;
-            int notFoundWidth = this.textRenderer.getWidth(notFoundText);
-            int notFoundX = centerX - notFoundWidth / 2;
-
-            context.drawText(
-                    this.textRenderer,
-                    notFoundText,
-                    notFoundX,
+            // Player not found text with DIRECT crisp text rendering
+            DirectTextRenderer.drawCenteredText(
+                    context,
+                    "Player not found: " + this.currentUsername,
+                    centerX,
                     centerY + 40,
-                    0xFF5555,
-                    false
+                    config.getColor("text_error", 0xFF5555)
             );
         }
 
-        // Render all child widgets
-        super.render(context, mouseX, mouseY, delta);
+        // Render all child widgets (force rendering of text fields and buttons)
+        renderWidgets(context, mouseX, mouseY, delta);
 
         // Render leaderboard widget
         if (this.leaderboardWidget != null && this.leaderboardWidget.isVisible()) {
             this.leaderboardWidget.render(context, mouseX, mouseY, delta);
+        }
+    }
+
+    // Add this private helper method to render widgets with crisp text
+    private void renderWidgets(DrawContext context, int mouseX, int mouseY, float delta) {
+        // Render buttons and other widgets
+        for (Element element : this.children()) {
+            if (element instanceof Drawable drawable) {
+                drawable.render(context, mouseX, mouseY, delta);
+            }
+        }
+
+        // Re-render button text for crispness if needed
+        for (Element element : this.children()) {
+            if (element instanceof ButtonWidget button) {
+                // Just to ensure the text stays sharp, we could re-render it here
+                int buttonCenterX = button.getX() + button.getWidth() / 2;
+                int buttonTextY = button.getY() + (button.getHeight() - 8) / 2;
+
+                if (!(button instanceof SharpTabButton)) {
+                    DirectTextRenderer.drawCenteredText(
+                            context,
+                            button.getMessage().getString(),
+                            buttonCenterX,
+                            buttonTextY,
+                            button.active ? 0xFFFFFF : 0xAAAAAA
+                    );
+                }
+            }
         }
     }
 
@@ -296,28 +319,30 @@ public class TierScreen extends Screen {
             JsonObject userData = this.playerData.get("userData").getAsJsonObject();
             JsonArray stats = userData.getAsJsonArray("stats");
 
+            ModConfig config;
+            config = null;
             if (stats != null && !stats.isEmpty()) {
                 JsonObject gameStats = stats.get(0).getAsJsonObject();
 
                 // Get theme colors
-                ModConfig config = ModConfig.getInstance();
+                config = ModConfig.getInstance();
                 int textPrimaryColor = config.getColor("text_primary", 0xFFFFFF);
                 int textSecondaryColor = config.getColor("text_secondary", 0xAAAAAA);
                 int tierTextColor = config.getColor("tier_text", 0x4080FF);
                 int pointsTextColor = config.getColor("points_text", 0xFFAA00);
+                int errorTextColor = config.getColor("text_error", 0xFF5555);
 
                 // Calculate precise positions
                 int startX = windowX + 20;
                 int startY = windowY + 80;
 
-                // Render player name precisely
-                context.drawText(
-                        this.textRenderer,
+                // Render player name with DIRECT crisp text
+                DirectTextRenderer.drawText(
+                        context,
                         "Player: " + this.currentUsername,
                         startX,
                         startY,
-                        textPrimaryColor,
-                        false
+                        textPrimaryColor
                 );
 
                 // Get selected game mode stats
@@ -332,105 +357,77 @@ public class TierScreen extends Screen {
                     int points = apiService.getPointsForTier(tier);
                     String formattedTime = apiService.formatUnixTimestamp(lastUpdate);
 
-                    // Render tier with precise positioning
-                    context.drawText(
-                            this.textRenderer,
+                    // Render tier with DIRECT crisp text
+                    DirectTextRenderer.drawText(
+                            context,
                             "Tier: " + tier,
                             startX,
                             startY + 20,
-                            tierTextColor,
-                            false
+                            tierTextColor
                     );
 
-                    // Render points with precise positioning
-                    context.drawText(
-                            this.textRenderer,
+                    // Render points with DIRECT crisp text
+                    DirectTextRenderer.drawText(
+                            context,
                             "Points: " + points,
                             startX,
                             startY + 40,
-                            pointsTextColor,
-                            false
+                            pointsTextColor
                     );
 
-                    // Render last updated with precise positioning
-                    context.drawText(
-                            this.textRenderer,
+                    // Render last updated with DIRECT crisp text
+                    DirectTextRenderer.drawText(
+                            context,
                             "Last updated: " + formattedTime,
                             startX,
                             startY + 60,
-                            textSecondaryColor,
-                            false
+                            textSecondaryColor
                     );
 
                     // Render rank if leaderboard is available
                     if (this.leaderboardWidget != null) {
                         int rank = this.leaderboardWidget.getPlayerRank(this.currentUsername);
                         if (rank > 0) {
-                            context.drawText(
-                                    this.textRenderer,
+                            DirectTextRenderer.drawText(
+                                    context,
                                     "Rank: #" + rank + " in " + this.selectedTab,
                                     startX,
                                     startY + 80,
-                                    pointsTextColor,
-                                    false
+                                    pointsTextColor
                             );
                         }
                     }
                 } else {
                     // No data for this game mode
-                    context.drawText(
-                            this.textRenderer,
+                    DirectTextRenderer.drawText(
+                            context,
                             "No data for " + TAB_LABELS[getTabIndex(this.selectedTab)],
                             startX,
                             startY + 20,
-                            config.getColor("text_error", 0xFF5555),
-                            false
+                            errorTextColor
                     );
                 }
             } else {
                 // No tier data at all
-                context.drawText(
-                        this.textRenderer,
+                DirectTextRenderer.drawText(
+                        context,
                         "No tier data available",
                         windowX + 20,
                         windowY + 100,
-                        ModConfig.getInstance().getColor("text_error", 0xFF5555),
-                        false
+                        config.getColor("text_error", 0xFF5555)
                 );
             }
         } catch (Exception e) {
             // Error displaying data
-            context.drawText(
-                    this.textRenderer,
+            DirectTextRenderer.drawText(
+                    context,
                     "Error displaying player data: " + e.getMessage(),
                     windowX + 20,
                     windowY + 100,
-                    ModConfig.getInstance().getColor("text_error", 0xFF5555),
-                    false
+                    ModConfig.getInstance().getColor("text_error", 0xFF5555)
             );
             LOGGER.error("Error rendering player data", e);
         }
-    }
-
-    /**
-     * Get color for a tier
-     */
-    private int getTierColor(String tier) {
-        if (tier == null) return 0xFF4080FF; // Default
-
-        if (tier.equals("LT69")) return 0xFFAA00FF; // Special color for LT69
-        if (tier.startsWith("HT1")) return 0xFFFF55FF;
-        if (tier.startsWith("LT1")) return 0xFFFF5555;
-        if (tier.startsWith("HT2")) return 0xFFFF8800;
-        if (tier.startsWith("LT2")) return 0xFFFFAA00;
-        if (tier.startsWith("HT3")) return 0xFF55FF55;
-        if (tier.startsWith("LT3")) return 0xFF55FFFF;
-        if (tier.startsWith("HT4")) return 0xFF5555FF;
-        if (tier.startsWith("LT4")) return 0xFF9955FF;
-        if (tier.startsWith("HT5")) return 0xFF555555;
-        if (tier.startsWith("LT5")) return 0xFFAAAAAA;
-
-        return 0xFF4080FF; // Default
     }
 
     private int getTabIndex(String gameMode) {
@@ -451,56 +448,15 @@ public class TierScreen extends Screen {
         historyTracker = tracker;
     }
 
-    // Custom tab button class with precise rendering
-    private static class TabButton extends ButtonWidget {
-        private final String gameMode;
-        private boolean selected;
-
-        public TabButton(int x, int y, int width, int height, Text text, PressAction onPress, String gameMode) {
-            super(x, y, width, height, text, onPress, DEFAULT_NARRATION_SUPPLIER);
-            this.gameMode = gameMode;
-            this.selected = false;
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Check if the leaderboard was clicked first
+        if (this.leaderboardWidget != null && this.leaderboardWidget.isVisible() &&
+                this.leaderboardWidget.mouseClicked(mouseX, mouseY, button)) {
+            return true;
         }
 
-        public String getGameMode() {
-            return gameMode;
-        }
-
-        public void setSelected(boolean selected) {
-            this.selected = selected;
-        }
-
-        @Override
-        public void renderWidget(DrawContext context, int mouseX, int mouseY, float delta) {
-            // Get theme colors precisely
-            ModConfig config = ModConfig.getInstance();
-            int activeTabColor = config.getColor("tab_active", 0xFF4080FF);
-            int inactiveTabColor = config.getColor("tab_inactive", 0xFF303030);
-
-            // Precise tab button rendering
-            if (this.selected) {
-                // Selected tab with full opacity
-                context.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), activeTabColor);
-            } else {
-                // Inactive tab with full opacity
-                context.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), inactiveTabColor);
-            }
-
-            // Precise text rendering
-            String buttonText = this.getMessage().getString();
-            int textWidth = MinecraftClient.getInstance().textRenderer.getWidth(buttonText);
-            int textX = this.getX() + (this.getWidth() - textWidth) / 2;
-            int textY = this.getY() + (this.getHeight() - 8) / 2;
-
-            // Render text without shadow for maximum sharpness
-            context.drawText(
-                    MinecraftClient.getInstance().textRenderer,
-                    buttonText,
-                    textX,
-                    textY,
-                    this.selected ? 0xFFFFFF : 0xE0E0E0,
-                    false
-            );
-        }
+        // Otherwise handle normal clicks
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 }

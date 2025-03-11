@@ -2,9 +2,11 @@ package com.example.tag;
 
 import com.example.tag.PlayerHistoryTracker.PlayerHistory;
 import com.example.tag.PlayerHistoryTracker.TierSnapshot;
-import com.example.tag.util.TextRenderHelper;
+import com.example.tag.fix.DirectTextRenderer;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.Drawable;
+import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.Text;
@@ -16,6 +18,7 @@ import java.util.List;
 
 /**
  * Screen to display historical tier data for a player
+ * Enhanced with pixel-perfect rendering for maximum clarity
  */
 public class PlayerHistoryScreen extends Screen {
     private static final Logger LOGGER = LoggerFactory.getLogger("PlayerHistoryScreen");
@@ -48,6 +51,7 @@ public class PlayerHistoryScreen extends Screen {
     protected void init() {
         super.init();
 
+        // Calculate exact pixel positions for sharp rendering
         int centerX = this.width / 2;
         int centerY = this.height / 2;
         int windowX = centerX - WINDOW_WIDTH / 2;
@@ -88,16 +92,14 @@ public class PlayerHistoryScreen extends Screen {
         }
     }
 
+    // Replace the render method in PlayerHistoryScreen.java with this implementation:
+
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        // Render background
-        try {
-            renderBackground(context, mouseX, mouseY, delta);
-        } catch (NoSuchMethodError e) {
-            // Fallback for different API versions
-            context.fill(0, 0, this.width, this.height, 0x88000000);
-        }
+        // Render background with pixel-perfect fill
+        DirectTextRenderer.drawRect(context, 0, 0, this.width, this.height, 0x88000000);
 
+        // Calculate exact pixel positions
         int centerX = this.width / 2;
         int centerY = this.height / 2;
         int windowX = centerX - WINDOW_WIDTH / 2;
@@ -109,40 +111,54 @@ public class PlayerHistoryScreen extends Screen {
         int borderColor = config.getColor("border", 0xFFFFFFFF);
         int titleColor = config.getColor("title", 0xFFFFFF);
 
-        // Draw window background
-        context.fill(windowX, windowY, windowX + WINDOW_WIDTH, windowY + WINDOW_HEIGHT, backgroundColor);
-        drawBorder(context, windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, borderColor);
+        // Draw window background with pixel-perfect edges
+        DirectTextRenderer.drawRect(context, windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, backgroundColor);
 
-        // Draw title
-        TextRenderHelper.drawCenteredText(context, this.textRenderer, this.title.getString(), centerX, windowY + 10, titleColor);
+        // Draw border with pixel-perfect rendering
+        DirectTextRenderer.drawBorder(context, windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT, borderColor);
 
-        // Render history data
+        // Draw title with sharp text
+        DirectTextRenderer.drawCenteredText(
+                context,
+                this.title.getString(),
+                centerX,
+                windowY + 10,
+                titleColor
+        );
+
+        // Render history data with sharp text
         renderHistoryData(context, windowX, windowY);
 
-        // Call parent render which will render all children (buttons, etc.)
-        super.render(context, mouseX, mouseY, delta);
+        // Render widgets
+        renderWidgets(context, mouseX, mouseY, delta);
     }
 
-    /**
-     * Draw a border around a rectangle
-     */
-    private void drawBorder(DrawContext context, int x, int y, int width, int height, int color) {
-        try {
-            // Try the newer method first
-            context.drawBorder(x, y, width, height, color);
-        } catch (NoSuchMethodError e) {
-            // Fall back to manual border drawing
-            // Top
-            context.fill(x, y, x + width, y + 1, color);
-            // Bottom
-            context.fill(x, y + height - 1, x + width, y + height, color);
-            // Left
-            context.fill(x, y, x + 1, y + height, color);
-            // Right
-            context.fill(x + width - 1, y, x + width, y + height, color);
+    // Add this private helper method to render widgets with crisp text
+    private void renderWidgets(DrawContext context, int mouseX, int mouseY, float delta) {
+        // First render all drawable elements
+        for (Element element : this.children()) {
+            if (element instanceof Drawable drawable) {
+                drawable.render(context, mouseX, mouseY, delta);
+            }
+        }
+
+        // Then re-render button text for sharpness
+        for (Element element : this.children()) {
+            if (element instanceof ButtonWidget button) {
+                int buttonCenterX = button.getX() + button.getWidth() / 2;
+                int buttonTextY = button.getY() + (button.getHeight() - 8) / 2;
+                DirectTextRenderer.drawCenteredText(
+                        context,
+                        button.getMessage().getString(),
+                        buttonCenterX,
+                        buttonTextY,
+                        button.active ? 0xFFFFFF : 0xAAAAAA
+                );
+            }
         }
     }
 
+    // Replace the renderHistoryData method with this implementation:
     private void renderHistoryData(DrawContext context, int windowX, int windowY) {
         PlayerHistory history = historyTracker.getPlayerHistory(playerUuid);
 
@@ -154,9 +170,8 @@ public class PlayerHistoryScreen extends Screen {
         int pointsColor = config.getColor("points_text", 0xFFAA00);
 
         if (history == null) {
-            TextRenderHelper.drawCenteredText(
+            DirectTextRenderer.drawCenteredText(
                     context,
-                    this.textRenderer,
                     "No history data available for this player",
                     windowX + WINDOW_WIDTH / 2,
                     windowY + 120,
@@ -168,9 +183,8 @@ public class PlayerHistoryScreen extends Screen {
         List<TierSnapshot> snapshots = history.getTierSnapshots(selectedTab);
 
         if (snapshots.isEmpty()) {
-            TextRenderHelper.drawCenteredText(
+            DirectTextRenderer.drawCenteredText(
                     context,
-                    this.textRenderer,
                     "No history data for " + selectedTab,
                     windowX + WINDOW_WIDTH / 2,
                     windowY + 120,
@@ -179,61 +193,51 @@ public class PlayerHistoryScreen extends Screen {
             return;
         }
 
-        // Draw current tier
-        TierSnapshot latest = snapshots.get(snapshots.size() - 1);
-        TextRenderHelper.drawText(
+        // Draw current tier with sharp text
+        TierSnapshot latest = snapshots.getLast();
+        DirectTextRenderer.drawText(
                 context,
-                this.textRenderer,
                 "Current Tier: " + latest.getTier() + " (" + latest.getPoints() + " points)",
                 windowX + 20,
                 windowY + 60,
-                textColor,
-                true
+                textColor
         );
 
-        TextRenderHelper.drawText(
+        DirectTextRenderer.drawText(
                 context,
-                this.textRenderer,
                 "Last Updated: " + latest.getFormattedDate(),
                 windowX + 20,
                 windowY + 75,
-                secondaryColor,
-                true
+                secondaryColor
         );
 
-        // Draw table headers
+        // Draw table headers with sharp text
         int tableY = windowY + 100;
-        TextRenderHelper.drawText(
+        DirectTextRenderer.drawText(
                 context,
-                this.textRenderer,
                 "Date",
                 windowX + 30,
                 tableY,
-                secondaryColor,
-                true
+                secondaryColor
         );
 
-        TextRenderHelper.drawText(
+        DirectTextRenderer.drawText(
                 context,
-                this.textRenderer,
                 "Tier",
                 windowX + 150,
                 tableY,
-                secondaryColor,
-                true
+                secondaryColor
         );
 
-        TextRenderHelper.drawText(
+        DirectTextRenderer.drawText(
                 context,
-                this.textRenderer,
                 "Points",
                 windowX + 250,
                 tableY,
-                secondaryColor,
-                true
+                secondaryColor
         );
 
-        // Draw history table
+        // Draw history table with sharp text
         int entryHeight = 15;
         int startY = tableY + 20;
         int maxEntries = 10; // Show last 10 entries
@@ -245,42 +249,36 @@ public class PlayerHistoryScreen extends Screen {
             TierSnapshot snapshot = snapshots.get(i);
             int entryY = startY + (i - startIndex) * entryHeight;
 
-            // Draw date
-            TextRenderHelper.drawText(
+            // Draw date with sharp text
+            DirectTextRenderer.drawText(
                     context,
-                    this.textRenderer,
                     snapshot.getFormattedDate(),
                     windowX + 30,
                     entryY,
-                    textColor,
-                    true
+                    textColor
             );
 
             // Draw tier with color based on tier
             int tierTextColor = getTierColor(snapshot.getTier());
-            TextRenderHelper.drawText(
+            DirectTextRenderer.drawText(
                     context,
-                    this.textRenderer,
                     snapshot.getTier(),
                     windowX + 150,
                     entryY,
-                    tierTextColor,
-                    true
+                    tierTextColor
             );
 
-            // Draw points
-            TextRenderHelper.drawText(
+            // Draw points with sharp text
+            DirectTextRenderer.drawText(
                     context,
-                    this.textRenderer,
                     String.valueOf(snapshot.getPoints()),
                     windowX + 250,
                     entryY,
-                    pointsColor,
-                    true
+                    pointsColor
             );
         }
 
-        // If we have enough data, draw a small trend indicator
+        // If we have enough data, draw a small trend indicator with sharp text
         if (snapshots.size() >= 2) {
             TierSnapshot first = snapshots.get(0);
             TierSnapshot last = snapshots.get(snapshots.size() - 1);
@@ -299,17 +297,17 @@ public class PlayerHistoryScreen extends Screen {
                 trendColor = 0xFFFF55; // Yellow
             }
 
-            TextRenderHelper.drawText(
+            DirectTextRenderer.drawText(
                     context,
-                    this.textRenderer,
                     "Trend: " + trendText,
                     windowX + 20,
                     windowY + WINDOW_HEIGHT - 60,
-                    trendColor,
-                    true
+                    trendColor
             );
         }
     }
+
+
 
     private int getTierColor(String tier) {
         // Return color based on tier
@@ -329,51 +327,5 @@ public class PlayerHistoryScreen extends Screen {
     @Override
     public boolean shouldPause() {
         return false;
-    }
-
-    // Custom tab button class (copied from TierScreen)
-    private static class TabButton extends ButtonWidget {
-        private final String gameMode;
-        private boolean selected;
-
-        public TabButton(int x, int y, int width, int height, Text text, PressAction onPress, String gameMode) {
-            super(x, y, width, height, text, onPress, DEFAULT_NARRATION_SUPPLIER);
-            this.gameMode = gameMode;
-            this.selected = false;
-        }
-
-        public String getGameMode() {
-            return gameMode;
-        }
-
-        public void setSelected(boolean selected) {
-            this.selected = selected;
-        }
-
-        @Override
-        public void renderWidget(DrawContext context, int mouseX, int mouseY, float delta) {
-            // Get theme colors
-            ModConfig config = ModConfig.getInstance();
-            int activeTabColor = config.getColor("tab_active", 0xFF4080FF);
-            int inactiveTabColor = config.getColor("tab_inactive", 0xFF303030);
-
-            // Custom rendering for tab buttons
-            if (this.selected) {
-                // Selected tab styling
-                context.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), activeTabColor);
-            } else {
-                // Normal tab styling
-                context.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), inactiveTabColor);
-            }
-
-            TextRenderHelper.drawCenteredText(
-                    context,
-                    MinecraftClient.getInstance().textRenderer,
-                    this.getMessage().getString(),
-                    this.getX() + this.getWidth() / 2,
-                    this.getY() + (this.getHeight() - 8) / 2,
-                    this.selected ? 0xFFFFFF : 0xE0E0E0
-            );
-        }
     }
 }

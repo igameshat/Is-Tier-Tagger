@@ -1,6 +1,7 @@
 plugins {
 	id 'fabric-loom' version '1.9-SNAPSHOT'
 	id 'maven-publish'
+	id 'com.github.johnrengelman.shadow' version '7.1.2'
 }
 
 version = project.mod_version
@@ -18,11 +19,19 @@ repositories {
 	// for more information about repositories.
 }
 
+shadowJar {
+	configurations = [project.configurations.runtimeClasspath]
+	// Include JDA and its dependencies
+	dependencies {
+		include(dependency('net.dv8tion:JDA'))
+	}
+}
+
 loom {
 	splitEnvironmentSourceSets()
 
 	mods {
-		"is-tier-tagger" {
+		"testing" {
 			sourceSet sourceSets.main
 			sourceSet sourceSets.client
 		}
@@ -38,7 +47,7 @@ dependencies {
 
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
-	implementation 'net.dv8tion:JDA:5.0.0-beta.20'
+	implementation("net.dv8tion:JDA:${project.jda_version}")
 	
 }
 
@@ -46,7 +55,7 @@ processResources {
 	inputs.property "version", project.version
 
 	filesMatching("fabric.mod.json") {
-		expand "version": project.version
+		expand "version": inputs.properties.version
 	}
 }
 
@@ -65,8 +74,10 @@ java {
 }
 
 jar {
+	inputs.property "archivesName", project.base.archivesName
+
 	from("LICENSE") {
-		rename { "${it}_${project.base.archivesName.get()}"}
+		rename { "${it}_${inputs.properties.archivesName}"}
 	}
 }
 
